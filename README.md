@@ -1,33 +1,56 @@
 # NuPhy Agent Lights
 
-给 NuPhy Air75 V3 做一个 Agent 状态灯。首个目标设备是月虹白特别版，ANSI 布局，官方固件 `2.0.0.7`。
+用 NuPhy Air75 V3 的 F1 显示 Codex 状态，F2 显示 Claude Code 状态。左右灯条一起显示所有会话中最需要关注的状态。设备范围为 **Apple Silicon Mac、macOS 13 或更高版本、USB 有线模式、Air75 V3 ANSI 官方固件 2.0.0.7**。开发与实机验证使用月虹白特别版。
 
-第一版面向这台 Mac 上运行的 Codex 和 Claude Code，各覆盖 Desktop 和 CLI。设计上用按键背光区分来源，用两侧灯条提醒用户是否需要回来处理。当前已完成 USB 只读探测和客户端接口调研，控制器与四个入口的端到端验证待实现。
+## 在另一台 Mac 上安装
 
-## 键盘实测与灯区分工
+1. 把 `NuPhy-Agent-Lights-macOS-arm64.tar.gz` 复制到另一台 Mac，双击解压。安装包内含 ARM64 HID 驱动、Python 运行时和许可证，目标机可以离线安装，无需 Git、Homebrew、Xcode 或系统 Python。
+2. 用当前 macOS 用户运行解压目录里的 `install.command`。也可以在终端输入 `/bin/sh `，将该文件拖入终端后按回车。安装器将运行文件复制到当前用户的 `~/Library/Application Support/NuPhy Agent Lights/`，并合并 Codex 和 Claude Code 的 hook 配置。安装完成后可以移动或删除解压目录。
+3. 键盘连 USB 数据线并切到有线档位。关闭占用键盘的 NuPhyIO 或 NuPhy Lab。在 Codex CLI 输入 `/hooks`，或到桌面端 Settings → Hooks，审阅指向 `NuPhy Agent Lights/current/lights` 的命令。Claude Desktop 使用 Code 标签页的本地会话。打开新会话进行测试。
 
-2026-11-21，用 NuPhy Lab 的 Swift HID 桥对连接中的键盘执行 `connect`、`readColors` 和 `quit`。实机报告 USB `19f5:1028`、Air75 V3 ANSI、固件 `2.0.0.7`、Mac 灯光配置、22 字节灯效状态，并成功读出 104 个 RGB 值。该版本桥接器识别出 84 个逐键灯位和 20 个侧灯灯位；原厂协议给左右灯条提供一套共同的颜色和效果。本次实测只读取设备，写灯和恢复仍需验证。[NuPhy Lab 对该固件的适配说明](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/docs/RELEASE_1.2.50.md)
+安装包使用本地签名。若 macOS 阻止运行，请先核对归档的 SHA-256 和来源，再通过系统设置的「隐私与安全性」处理 macOS 显示的打开提示。每台 Mac 各自完成客户端登录、hook 审阅和必要的设备权限设置。迁移时只需复制归档；恢复记录与本机键盘配置相关。
 
-建议初始键位用 F1 表示 Codex、F2 表示 Claude Code。同一产品的多个会话在对应键上汇总，Desktop 和 CLI 可同时使用。运行中亮低亮蓝灯，等人操作亮琥珀色，本轮结束短亮绿灯。两侧灯条一同显示全局最高优先级，等待高于运行，运行高于结束提示。这样一个会话结束时，另一会话的等待提示仍然可见。全部空闲后恢复接管前的键盘灯效。亮度需在月虹白的雾透键帽上目视校准。
+### 验证与日常操作
 
-## Desktop 和 CLI 怎样接入
+```sh
+lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
+"$lights" demo       # 演示三个状态组合，回读后恢复原灯效
+"$lights" status     # 查看各产品状态、最近收到的 hook、硬件回读及恢复记录
+"$lights" recover    # 清除当前指示状态，要求控制器恢复原灯效
+"$lights" uninstall  # 移除本项目的 hook，清除指示状态并启动恢复
+```
 
-| 本地入口 | 事件来源 | 接入细节 |
-| --- | --- | --- |
-| Codex Desktop、Codex CLI | 用户级 `$CODEX_HOME/hooks.json`，默认 `~/.codex/hooks.json` | 两个入口共用配置。Desktop 可从 Settings → Hooks 审阅，CLI 使用 `/hooks`。本机 CLI `0.153.0` 已启用 hooks，且其协议包含下述事件。[OpenAI 官方 Hooks 文档](https://learn.chatgpt.com/docs/hooks) |
-| Claude Desktop 的 Code 标签页、Claude Code CLI | 用户级 `~/.claude/settings.json` 内的 `hooks` | 本地 Code 会话和 CLI 共享 hook 配置。本机 CLI 版本为 `2.1.259`。SSH 或云端执行需另外把远端事件送回这台 Mac。[Desktop 与 CLI 的配置共享](https://code.claude.com/docs/en/desktop#shared-configuration) · [Claude Code Hooks](https://code.claude.com/docs/en/hooks) |
+若键盘曾拔线，将它接回原 Mac/Win 档位后检查 `status`。恢复完成时 `recovery_records` 为空。卸载后程序、配置备份和恢复记录留在用户目录，便于重新启用或恢复。确认恢复后可自行删除该目录。重复安装同一份归档会复用已有程序，并保留其他 hook。用户配置路径遵循 `CODEX_HOME` 和 `CLAUDE_CONFIG_DIR`；自定义路径时请从带有这些环境变量的终端运行安装器。
 
-两份配置各调用一个轻量命令，显式传入产品名。命令从标准输入的 JSON 提取事件名、会话 ID 和可用的轮次、工具调用标识，通过本机 Unix socket 交给单一控制器后返回。控制器按需启动并独占灯光写入。安装时合并已有 hook。灯控命令只报告状态，审批仍由客户端处理。首版按本地执行设计，Codex 云端编排不能运行这个本地命令。[OpenAI 官方 Hooks 文档](https://learn.chatgpt.com/docs/hooks)
+## 状态和四个入口
 
-- **开始与结束**：`UserPromptSubmit` 开始一轮，主会话 `Stop` 触发短暂结束提示。绿色只表示本轮结束。Claude 的 `StopFailure` 可单独提示 API 错误。Codex 的 `Interrupt` 清除被中断轮次，`SessionEnd` 移除对应会话。
-- **等人操作**：`PermissionRequest` 标记待审批；同步提问可通过 `PreToolUse` 匹配客户端实际暴露的提问工具，例如 Claude 的 `AskUserQuestion`。匹配的工具返回时清掉该等待项；Claude 同时处理 `PostToolUseFailure`。异步提问仍允许任务继续运行。未收到终止事件的会话需要过期清理。
-- **并行会话**：按产品和 `session_id` 隔离状态。Codex 再按 `turn_id` 归并；Claude 可用每次提交建立本地轮次。Codex 的审批事件未提供工具调用 ID，同一轮内重叠的同名请求需保守归并，无法唯一配对时保留等待至轮次结束或过期。可区分的待处理请求分别计数，普通工具返回、子代理结束和上一轮迟到的事件都不能清掉另一项等待。
+| 指示 | 含义 |
+| --- | --- |
+| F1、F2 | 分别汇总 Codex、Claude Code 的本地会话，包括 Desktop 和 CLI |
+| 蓝色 | 有会话正在运行 |
+| 琥珀色 | 有会话等待审批或同步提问的答复 |
+| 红色 | 收到 Claude Code 的 `StopFailure`，提示 5 秒 |
+| 绿色 | 主会话本轮结束，提示 5 秒 |
+| 两侧灯条 | 共同显示等待、错误、运行、结束中优先级最高的一项。全部空闲后恢复原灯效 |
 
-## macOS 灯控实现
+Codex Desktop 和 CLI 使用同一份用户级 `hooks.json`。Claude Code CLI 和 Claude Desktop 的本地 Code 会话共享用户级 `settings.json`。云端或 SSH 远端执行不在首版范围内。[OpenAI Hooks](https://learn.chatgpt.com/docs/hooks) · [Claude Code Hooks](https://code.claude.com/docs/en/hooks) · [Claude Desktop 配置共享](https://code.claude.com/docs/en/desktop#shared-configuration)
 
-1. 通过用户态 `IOHIDManager` 打开有线设备的 64 字节配置接口（usage page 1、usage 0）。按当前 Mac/Win 配置读取固件、灯位数量、灯效和 RGB。切换模式前保存原灯效，首次改色前备份自定义调色板。
-2. 按键背光使用自定义灯效 21，通过 `D8` 分包更新 0–83 号灯位，首帧用 `D2` 回读。此模式接管整块背光，需要给其他键确定背景色。首版用低亮静态背景，按状态变化写入。
-3. 两侧灯条使用 `D6` 从偏移 9 写入 8 字节侧灯设置，通过 `D5` 回读。这样可以单独改变侧灯并保留主灯设置。硬件层以适配 22 字节状态的 NuPhy Lab 为依据；NuPhy Codex Sidelight 的按需启动和会话汇总可参考，其灯效驱动按旧的 17 字节状态编写。[NuPhy Lab HID 实现](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/native/HIDBridge.swift) · [Sidelight 驱动](https://github.com/joe960913/nuphy-codex-sidelight/blob/5c0980b192545cefccf35711ac23f4d97c968c1a/nuphy.py)
-4. 全部空闲或正常退出时恢复并回读；拔线或进程异常退出时保留恢复记录，重连后按设备、固件和 Mac/Win 配置核对。若某个原始自定义灯效或主色在 `2.0.0.7` 无法可靠还原，可单独启用侧灯。[NuPhy Lab 兼容说明](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/docs/RELEASE_1.2.50.md)
+hook 从标准输入提取生命周期信息，用本机 SQLite 事务按产品、会话和可用的轮次 ID 汇总，并按需唤起单一控制器。共享状态只记录标识、事件、工具名和时间。聊天内容和工具参数不写入数据库。控制器合并重复状态，全部空闲时释放 USB 并退出。客户端异常退出时会清理能识别到进程的活动指示，其他缺失终止事件的会话在最后事件的 4 小时后过期。`recover` 可立即清除指示。
 
-首轮验收分两步。先验证 F1、F2 的物理位置、侧灯独立于背光变色，以及退出后原灯效恢复；再分别从四个入口跑一轮“提交 → 等待审批 → 继续 → 结束”。最后同时运行两个客户端，让一个等待、另一个结束，检查侧灯仍保留等待提示。
+## 灯控协议与验收
+
+有线接口为 `19f5:1028`，usage page 1、usage 0。已读回 22 字节灯效状态和 104 个 RGB 值。84 个键盘灯位采用自定义灯效 21 和 `D8` 更新，用 `D2` 验证；左右共 20 个侧灯灯位作为单一区，通过 `D6` 写偏移 9 的 8 字节设置，并用 `D5` 回读。按键模式接管整块背光，其他键使用低亮背景。若当前主灯设置无法可靠恢复，控制器可只接管侧灯。[NuPhy Lab 固件说明](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/docs/RELEASE_1.2.50.md) · [原生 HID 实现](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/native/HIDBridge.swift)
+
+本机实测已验证逐键和侧灯配置写入、等待优先级及原灯效恢复。可通过 `demo` 检查具体键位和亮度。在另一台 Mac 验收四个入口时，分别运行一轮「提交 → 等待审批 → 继续 → 结束」，用 `status` 核对事件及硬件状态，再让一个会话等待、另一个会话结束，观察侧灯是否保持琥珀色。
+
+## 从源码构建安装包
+
+在具备 Command Line Tools 和网络的 Apple Silicon Mac 上运行：
+
+```sh
+./scripts/build-package.sh
+./scripts/test-package.sh dist/NuPhy-Agent-Lights-macOS-arm64.tar.gz
+/usr/bin/python3 -B -m unittest -v
+```
+
+归档和 SHA-256 校验文件输出到 `dist/`。构建脚本固定 NuPhy Lab 提交和 Python 独立运行时版本，校验 SHA-256、本地编译 HID 驱动并运行桥接器自检。接收方只需归档。包内保留 NuPhy Lab 的 MIT 许可和 Python 运行时随附的第三方许可。[NuPhy Lab](https://github.com/bohu8264/NuPhyLab-next) · [Python Build Standalone](https://github.com/astral-sh/python-build-standalone)
