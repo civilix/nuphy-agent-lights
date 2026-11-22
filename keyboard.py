@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from lifecycle import PRIORITY
-from pixels import FRAME_SECONDS, key_frame
+from pixels import FRAME_SECONDS, PERIMETER, key_frame
 
 DATA = Path.home() / "Library/Application Support/NuPhy Agent Lights"
 COLORS = {"idle": "#090909", "working": "#1466C8", "waiting": "#FF8C10",
@@ -75,21 +75,22 @@ class Keyboard:
                 if exc.code not in ("AIRLINK_COLOR_RESTORE_UNVERIFIED", "AIRLINK_ORIGINAL_MODE_UNVERIFIED"):
                     raise
                 self.side_only = True
+        if not self.previous or "working" not in self.previous:
+            self.phase = 0
         if not self.side_only:
-            self.request("paint", colors=key_frame(states, palette, 0), verify=True)
+            self.request("paint", colors=key_frame(states, palette, self.phase), verify=True)
         overall = max(states, key=PRIORITY.index)
         if self.previous is None or max(self.previous, key=PRIORITY.index) != overall:
             self.request("side", color=palette[overall], brightness=brightness, expectedProfile=self.profile)
         self.previous = states
         self.palette = palette
-        self.phase = 0
         self.next_frame = time.monotonic() + FRAME_SECONDS
 
     def animate(self):
         if self.side_only or not self.previous or "working" not in self.previous:
             return
         if time.monotonic() >= self.next_frame:
-            self.phase ^= 1
+            self.phase = (self.phase + 1) % len(PERIMETER)
             self.request("paint", colors=key_frame(self.previous, self.palette, self.phase), verify=False)
             self.next_frame = time.monotonic() + FRAME_SECONDS
 

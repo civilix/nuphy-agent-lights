@@ -15,6 +15,7 @@ from pathlib import Path
 
 from keyboard import DATA, Keyboard
 from lifecycle import EVENTS, PRODUCTS, reduce_event, summarize
+from pixels import FRAME_SECONDS
 
 SCRIPT = Path(__file__).resolve()
 IDLE = ("idle", "idle")
@@ -175,7 +176,7 @@ def worker(fd):
                             board.close()
                         board = None
                     time.sleep(3)
-                time.sleep(0.25)
+                time.sleep(FRAME_SECONDS if board and not board.side_only and "working" in states else 0.25)
         finally:
             if board:
                 board.close()
@@ -208,10 +209,11 @@ def test_keyboard(bridge_path=None):
 def demo():
     with test_keyboard() as (board, info):
         print(info["model"], info["firmwareVersion"], flush=True)
-        for states in [("working", "working"), ("working", "waiting"), ("done", "waiting")]:
+        for states, seconds in [(("working", "working"), 6), (("working", "waiting"), 2),
+                                (("done", "waiting"), 2)]:
             board.render(states)
             print(states, "side" if board.side_only else "keys+side", "verified", flush=True)
-            board.display_for(2)
+            board.display_for(seconds)
         result = board.restore()
         print("restore:", result.get("verification", "side"), "verified", flush=True)
 

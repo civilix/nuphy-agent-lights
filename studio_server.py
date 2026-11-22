@@ -46,7 +46,7 @@ def test_profile(data):
         raise ValueError("未找到 HIDBridge，请先安装本项目的 macOS 安装包。")
     with agent_lights.test_keyboard(bridge) as (board, _):
         board.render(states, colors, brightness)
-        board.display_for(3)
+        board.display_for(6)
         side_only = board.side_only
         board.restore()
         return "侧灯测试完成，已验证恢复原灯效。" if side_only else "按键与侧灯测试完成，已验证恢复原灯效。"

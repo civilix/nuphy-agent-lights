@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import agent_lights
 import studio_server
 from keyboard import BridgeError, COLORS, Keyboard
-from pixels import CLAUDE, CODEX, studio_asset
+from pixels import PERIMETER, TRAILS, key_frame, studio_asset
 
 
 class StudioTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class StudioTests(unittest.TestCase):
         frame = paint.kwargs["colors"]
         self.assertEqual(len(frame), 84)
         self.assertEqual(frame[:3], [COLORS["idle"], "#285234", COLORS["error"]])
-        self.assertEqual((frame[17], frame[21]), (CODEX["color"], CLAUDE["color"]))
+        self.assertEqual(frame[3:], [COLORS["idle"]] * 81)
         board.request.assert_called_with("side", color="#285234", brightness=62, expectedProfile=2)
         self.assertEqual(COLORS["waiting"], "#FF8C10")
 
@@ -50,13 +50,15 @@ class StudioTests(unittest.TestCase):
             board.animate()
             second = board.request.call_args.kwargs["colors"]
             board.request.assert_called_once_with("paint", colors=second, verify=False)
-            self.assertEqual({i for i in range(84) if first[i] != second[i]}, {63, 64, 67, 68})
+            self.assertEqual(first[44], TRAILS[1][0])  # PgDn
+            self.assertEqual(second[58], TRAILS[1][0])  # Home
+            self.assertEqual(second[1], COLORS["waiting"])
             board.render(("working", "idle"))
             clock.return_value = 2
             board.animate()
             frame = board.request.call_args.kwargs["colors"]
-            self.assertEqual(frame[49], COLORS["idle"])
-            self.assertNotIn(CLAUDE["color"], frame)
+            self.assertEqual(frame[2], TRAILS[0][0])
+            self.assertNotIn(TRAILS[1][0], frame)
             board.render(("waiting", "done"))
             board.request.reset_mock()
             clock.return_value = 3
@@ -72,7 +74,20 @@ class StudioTests(unittest.TestCase):
         board.animate()
         self.assertEqual([call.args[0] for call in board.request.call_args_list], ["arm", "side"])
 
-    def test_offline_preview_uses_current_sprite_frames(self):
+    def test_full_lap_is_edge_only_and_both_heads_stay_apart(self):
+        states = ("working", "working")
+        expected = [*range(15), 29, 44, 58, 72, *range(82, 72, -1), 59, 45, 30, 15]
+        self.assertEqual([slot for slot, _ in PERIMETER], expected)
+        for phase, slot in enumerate(expected):
+            frame = key_frame(states, COLORS, phase)
+            self.assertEqual(frame[slot], TRAILS[0][0])
+            self.assertEqual(frame[expected[(phase + 16) % 33]], TRAILS[1][0])
+            self.assertCountEqual([c for c in frame if c != COLORS["idle"]], TRAILS[0] + TRAILS[1])
+            self.assertTrue(all(c == COLORS["idle"] for i, c in enumerate(frame) if i not in expected))
+        self.assertEqual(key_frame(states, COLORS, 33), key_frame(states, COLORS, 0))
+        self.assertEqual(key_frame(("working", "waiting"), COLORS, 2)[2], COLORS["waiting"])
+
+    def test_offline_preview_uses_current_perimeter(self):
         self.assertEqual((studio_server.ROOT / "studio/dist/pixels.js").read_text(), studio_asset())
 
     def test_failed_manual_test_releases_device_and_hands_off_queued_hook(self):
