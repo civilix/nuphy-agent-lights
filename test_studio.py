@@ -17,7 +17,8 @@ class StudioTests(unittest.TestCase):
         with patch.object(agent_lights, "test_keyboard") as open_board:
             for change in ({"version": True}, {"codex": ["idle"]}, {"colors": {}},
                            {"colors": dict(COLORS, waiting="red")}, {"brightness": False},
-                           {"brightness": 101}, {"codex": "idle", "claude": "idle"}):
+                           {"brightness": 101}, {"efforts": ["xhigh"]}, {"efforts": ["low", {}]},
+                           {"codex": "idle", "claude": "idle"}):
                 with self.subTest(change=change), self.assertRaises(ValueError):
                     studio_server.test_profile(dict(self.profile, **change))
             open_board.assert_not_called()
@@ -89,6 +90,18 @@ class StudioTests(unittest.TestCase):
 
     def test_offline_preview_uses_current_perimeter(self):
         self.assertEqual((studio_server.ROOT / "studio/dist/pixels.js").read_text(), studio_asset())
+
+    def test_effort_patterns_share_the_edge_without_hiding_notices(self):
+        states = ("working", "idle")
+        for effort, count in [("low", 2), (None, 4), ("medium", 4), ("high", 7), ("ultra", 9)]:
+            frame = key_frame(states, COLORS, 0, (effort, None))
+            self.assertEqual(sum(c != COLORS["idle"] for c in frame), count)
+        for phase in range(33):
+            frame = key_frame(("working", "working"), COLORS, phase, ("xhigh", "max"))
+            self.assertEqual(sum(c != COLORS["idle"] for c in frame), 18)
+            frame = key_frame(("waiting", "working"), COLORS, phase, ("low", "max"))
+            self.assertEqual(frame[1], COLORS["waiting"])
+        self.assertEqual(studio_server.validate(self.profile)[-1], ("medium", "medium"))
 
     def test_failed_manual_test_releases_device_and_hands_off_queued_hook(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(agent_lights, "DATA", Path(tmp)), \

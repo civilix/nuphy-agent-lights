@@ -15,7 +15,7 @@ url="https://github.com/astral-sh/python-build-standalone/releases/download/2026
 curl -fsSL --retry 2 "$url" -o "$work/python.tgz"
 (cd "$work" && echo '2f11b8aa3726bdbd87dd9eb76568412faddf4f47e26913fa45d6a2e424972acd  python.tgz' | shasum -a 256 -c -)
 tar -xzf "$work/python.tgz" -C "$app/payload"
-cp "$repo"/agent_lights.py "$repo"/keyboard.py "$repo"/pixels.py "$repo"/lifecycle.py "$repo"/hook_config.py "$repo"/scripts/lights "$app/payload/"
+cp "$repo"/agent_lights.py "$repo"/keyboard.py "$repo"/pixels.py "$repo"/effort.py "$repo"/lifecycle.py "$repo"/hook_config.py "$repo"/scripts/lights "$app/payload/"
 mkdir -p "$app/payload/studio"
 cp -R "$repo/studio/dist" "$app/payload/studio/"
 cp "$repo/studio_server.py" "$app/payload/"

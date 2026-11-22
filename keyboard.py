@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from lifecycle import PRIORITY
+from effort import DEFAULT_EFFORTS
 from pixels import FRAME_SECONDS, PERIMETER, key_frame
 
 DATA = Path.home() / "Library/Application Support/NuPhy Agent Lights"
@@ -66,7 +67,7 @@ class Keyboard:
             self.restore()
         return info
 
-    def render(self, states, colors=None, brightness=38):
+    def render(self, states, colors=None, brightness=38, efforts=DEFAULT_EFFORTS):
         palette = COLORS if colors is None else colors
         if self.previous is None:
             try:
@@ -78,11 +79,12 @@ class Keyboard:
         if not self.previous or "working" not in self.previous:
             self.phase = 0
         if not self.side_only:
-            self.request("paint", colors=key_frame(states, palette, self.phase), verify=True)
+            self.request("paint", colors=key_frame(states, palette, self.phase, efforts), verify=True)
         overall = max(states, key=PRIORITY.index)
         if self.previous is None or max(self.previous, key=PRIORITY.index) != overall:
             self.request("side", color=palette[overall], brightness=brightness, expectedProfile=self.profile)
         self.previous = states
+        self.efforts = efforts
         self.palette = palette
         self.next_frame = time.monotonic() + FRAME_SECONDS
 
@@ -91,7 +93,7 @@ class Keyboard:
             return
         if time.monotonic() >= self.next_frame:
             self.phase = (self.phase + 1) % len(PERIMETER)
-            self.request("paint", colors=key_frame(self.previous, self.palette, self.phase), verify=False)
+            self.request("paint", colors=key_frame(self.previous, self.palette, self.phase, self.efforts), verify=False)
             self.next_frame = time.monotonic() + FRAME_SECONDS
 
     def display_for(self, seconds):

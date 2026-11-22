@@ -9,10 +9,12 @@ const states = {
   idle: "空闲",
 };
 const priority = ["idle", "done", "working", "error", "waiting"];
+const effortNames = { low: "低 · 短尾", medium: "中 · 追光", high: "高 · 脉冲", xhigh: "极高 · 双彗星" };
 const factory = {
   version: 1,
   codex: "working",
   claude: "working",
+  efforts: ["medium", "medium"],
   brightness: 38,
   colors: {
     working: "#1466C8",
@@ -24,10 +26,13 @@ const factory = {
 };
 const storageKey = "air75.signal-studio.v1";
 function profile(data) {
+  const efforts = data?.efforts === undefined ? factory.efforts : data.efforts;
   if (
     data?.version !== 1 ||
     !priority.includes(data.codex) ||
     !priority.includes(data.claude) ||
+    !Array.isArray(efforts) || efforts.length !== 2 ||
+    !efforts.every(e => typeof e === "string" && Object.hasOwn(effortNames, e)) ||
     !Number.isInteger(data.brightness) ||
     data.brightness < 0 ||
     data.brightness > 100 ||
@@ -43,6 +48,7 @@ function profile(data) {
     version: 1,
     codex: data.codex,
     claude: data.claude,
+    efforts: [...efforts],
     brightness: data.brightness,
     colors: Object.fromEntries(
       priority.map((k) => [k, data.colors[k].toUpperCase()]),
@@ -144,7 +150,15 @@ for (const row of rows) {
   }
   $("key-deck").append(el);
 }
-for (const id of ["codex", "claude"]) {
+for (const [i, id] of ["codex", "claude"].entries()) {
+  const effort = $(id + "-effort");
+  for (const [value, label] of Object.entries(effortNames)) effort.add(new Option(label, value));
+  effort.onchange = () => {
+    stopDemo();
+    config.efforts[i] = effort.value;
+    save();
+    render();
+  };
   for (const [value, label] of Object.entries(states))
     $(id).add(new Option(label, value));
   $(id).onchange = () => {
@@ -209,8 +223,10 @@ function showPerimeter(active) {
       for (const [i, state] of active.entries()) {
         if (state !== "working") continue;
         const head = perimeterPhase + i * Math.floor(size / 2);
-        for (const [distance, color] of perimeter.trails[i].entries()) {
-          lit.set(perimeter.path[(head - distance + size) % size], color);
+        const patterns = perimeter.patterns[perimeter.modes[config.efforts[i]]];
+        const beat = perimeter.beats[perimeterPhase % perimeter.beats.length];
+        for (const [distance, ink] of patterns[beat % patterns.length].entries()) {
+          if (ink !== null) lit.set(perimeter.path[(head - distance + size) % size], perimeter.ink[i][ink]);
         }
       }
       for (const [i, state] of active.entries()) {
@@ -238,6 +254,10 @@ function render() {
   const restored = overall === "idle";
   $("codex").value = active[0];
   $("claude").value = active[1];
+  for (const [i, id] of ["codex", "claude"].entries()) {
+    $(id + "-effort").value = config.efforts[i];
+    $(id + "-effort").disabled = active[i] !== "working";
+  }
   $("brightness").value = config.brightness;
   $("value").textContent = config.brightness + "%";
   for (const state of priority) {
@@ -266,7 +286,7 @@ function render() {
   $("legend").replaceChildren();
   for (const [i, product] of ["Codex", "Claude Code"].entries()) {
     const state = active[i];
-    const color = state === "working" ? perimeter.trails[i][0] : config.colors[state];
+    const color = state === "working" ? perimeter.ink[i][0] : config.colors[state];
     const item = document.createElement("span");
     item.className = "legend-item";
     item.append(

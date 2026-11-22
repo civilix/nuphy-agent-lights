@@ -367,8 +367,12 @@ h2 {
   align-items: center;
 }
 .agent {
+  flex-wrap: wrap;
   gap: 11px;
   padding: 7px 0;
+}
+.agent select + select {
+  margin-left: 0;
 }
 .agent label {
   font-weight: 600;

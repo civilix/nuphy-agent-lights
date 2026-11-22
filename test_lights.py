@@ -1,4 +1,6 @@
 import tempfile
+import json
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,6 +11,33 @@ from lifecycle import reduce_event, summarize
 
 
 class LightsTests(unittest.TestCase):
+    def test_effort_follows_the_current_turn_and_handles_late_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(app, "DATA", Path(tmp)), \
+                patch.object(app, "start_worker"), patch.object(app, "client_pid", return_value=None), \
+                patch.dict(os.environ, {"CODEX_HOME": tmp, "CLAUDE_EFFORT": ""}):
+            sessions = Path(tmp) / "sessions"
+            sessions.mkdir()
+            log = sessions / "rollout-date-one.jsonl"
+            def context(turn, level):
+                return json.dumps(dict(type="turn_context", payload=dict(turn_id=turn, effort=level))) + "\n"
+            log.write_text(context("old", "max"))
+            prompt = dict(session_id="one", turn_id="new", hook_event_name="UserPromptSubmit", transcript_path=str(log))
+            app.apply_hook("codex", prompt)
+            with app.database() as db:
+                self.assertEqual(app.snapshot(db, with_efforts=True, refresh=True)[1], (None, None))
+            with log.open("a") as stream:
+                stream.write(context("new", "xhigh"))
+            app.apply_hook("claude", dict(prompt, effort={"level": "low"}))
+            app.apply_hook("claude", dict(prompt, session_id="two", effort={"level": "high"}))
+            app.apply_hook("claude", dict(prompt, agent_id="child", effort={"level": "max"}))
+            with app.database() as db:
+                self.assertEqual(app.snapshot(db, with_efforts=True, refresh=True)[1], ("xhigh", "high"))
+                db.commit()
+            app.apply_hook("claude", dict(prompt, session_id="two", hook_event_name="Stop"))
+            app.apply_hook("codex", dict(prompt, turn_id="next"))
+            with app.database() as db:
+                self.assertEqual(app.snapshot(db, with_efforts=True, refresh=True)[1], (None, "low"))
+
     def test_waits_and_concurrent_products(self):
         def step(row, name, tool="", call="", **extra):
             return reduce_event(row, "codex", dict(hook_event_name=name, tool_name=tool,

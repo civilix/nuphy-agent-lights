@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from keyboard import DATA, Keyboard
+from effort import LEVELS, codex_transcript, known_level, turn_effort
 from lifecycle import EVENTS, PRODUCTS, reduce_event, summarize
 from pixels import FRAME_SECONDS
 
@@ -50,7 +51,7 @@ def client_pid(product):
     return None
 
 
-def snapshot(db, retire_exited=False):
+def snapshot(db, retire_exited=False, with_efforts=False, refresh=False):
     rows = db.execute("SELECT product,sid,state FROM sessions WHERE expires>?", (time.time(),)).fetchall()
     active = []
     for product, sid, raw in rows:
@@ -62,8 +63,22 @@ def snapshot(db, retire_exited=False):
                 if retire_exited:
                     db.execute("DELETE FROM sessions WHERE product=? AND sid=? AND state=?", (product, sid, raw))
                 continue
+        if refresh and product == "codex" and row["state"] == "working" and not row.get("effort"):
+            level = turn_effort(row.get("transcript"), sid, row.get("turn"))
+            if level:
+                row["effort"] = level
+                db.execute("UPDATE sessions SET state=? WHERE product=? AND sid=? AND state=?",
+                           (json.dumps(row), product, sid, raw))
         active.append((product, row))
-    return summarize(active)
+    states = summarize(active)
+    if not with_efforts:
+        return states
+    efforts = []
+    for product, state in zip(PRODUCTS, states):
+        levels = [row["effort"] for p, row in active if p == product and state == row["state"] == "working"
+                  and known_level(row.get("effort"))]
+        efforts.append(max(levels, key=LEVELS.index, default=None))
+    return states, tuple(efforts)
 
 
 def hardware_status(**fields):
@@ -94,7 +109,8 @@ def start_worker(script=SCRIPT):
 
 def apply_hook(product, event):
     sid = event.get("session_id")
-    if not isinstance(sid, str) or not sid or event.get("hook_event_name") not in EVENTS[product]:
+    if (not isinstance(sid, str) or not sid or event.get("agent_id")
+            or event.get("hook_event_name") not in EVENTS[product]):
         return
     now = time.time()
     with database() as db:
@@ -106,6 +122,17 @@ def apply_hook(product, event):
         record = db.execute("SELECT state FROM sessions WHERE product=? AND sid=?", key).fetchone()
         row = reduce_event(json.loads(record[0]) if record else None, product, event, now)
         if row is not None:
+            if row["state"] in ("working", "waiting"):
+                if product == "claude":
+                    effort = event.get("effort")
+                    level = known_level(effort.get("level") if isinstance(effort, dict) else None)
+                    level = level or known_level(os.environ.get("CLAUDE_EFFORT"))
+                    if level:
+                        row["effort"] = level
+                elif event.get("turn_id") == row.get("turn") and not row.get("effort"):
+                    path = codex_transcript(event.get("transcript_path"), sid)
+                    if path:
+                        row["transcript"] = path
             if event["hook_event_name"] == "UserPromptSubmit":
                 row["client_pid"] = client_pid(product)
             db.execute("INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)",
@@ -130,10 +157,15 @@ def worker(fd):
     signal.signal(signal.SIGINT, stop)
     board = None
     next_health = 0
+    next_effort = 0
     with database() as db, os.fdopen(fd, "a") as owner:
         try:
             while not stopping:
-                states = snapshot(db)
+                refresh = time.monotonic() >= next_effort
+                with db:
+                    states, efforts = snapshot(db, with_efforts=True, refresh=refresh)
+                if refresh:
+                    next_effort = time.monotonic() + 1
                 pending = any(DATA.glob("lighting.profile-*.json"))
                 try:
                     if not board and (pending or states != IDLE):
@@ -157,10 +189,10 @@ def worker(fd):
                         db.commit()
                         if pending:
                             time.sleep(3)
-                    elif board.previous != states:
-                        board.render(states)
+                    elif board.previous != states or board.efforts != efforts:
+                        board.render(states, efforts=efforts)
                         hardware_status(mode="side" if board.side_only else "keys+side",
-                                        codex=states[0], claude=states[1])
+                                        codex=states[0], claude=states[1], effort=dict(zip(PRODUCTS, efforts)))
                         next_health = time.monotonic() + 5
                     else:
                         if time.monotonic() >= next_health:
@@ -209,10 +241,12 @@ def test_keyboard(bridge_path=None):
 def demo():
     with test_keyboard() as (board, info):
         print(info["model"], info["firmwareVersion"], flush=True)
-        for states, seconds in [(("working", "working"), 6), (("working", "waiting"), 2),
-                                (("done", "waiting"), 2)]:
-            board.render(states)
-            print(states, "side" if board.side_only else "keys+side", "verified", flush=True)
+        for states, efforts, seconds in [(("working", "working"), ("low", "medium"), 2),
+                                         (("working", "working"), ("high", "xhigh"), 6),
+                                         (("working", "waiting"), ("xhigh", None), 2),
+                                         (("done", "waiting"), (None, None), 2)]:
+            board.render(states, efforts=efforts)
+            print(states, efforts, "side" if board.side_only else "keys+side", "verified", flush=True)
             board.display_for(seconds)
         result = board.restore()
         print("restore:", result.get("verification", "side"), "verified", flush=True)
@@ -261,7 +295,8 @@ def main():
     else:
         with database() as db:
             status = DATA / "hardware.json"
-            print(json.dumps(dict(sessions=dict(zip(PRODUCTS, snapshot(db))),
+            states, efforts = snapshot(db, with_efforts=True)
+            print(json.dumps(dict(sessions=dict(zip(PRODUCTS, states)), effort=dict(zip(PRODUCTS, efforts)),
                                   last_hooks={p: dict(event=e, at=t) for p, e, t in db.execute(
                                       "SELECT product,event,received FROM receipts")},
                                   last_hardware=json.loads(status.read_text()) if status.exists() else None,

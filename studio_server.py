@@ -32,11 +32,15 @@ def validate(data):
         raise ValueError("状态颜色无效")
     if type(brightness) is not int or not 0 <= brightness <= 100:
         raise ValueError("亮度必须为 0 到 100 的整数")
-    return states, colors, brightness
+    efforts = data.get("efforts", ["medium", "medium"])
+    if (not isinstance(efforts, list) or len(efforts) != 2
+            or not all(e in ("low", "medium", "high", "xhigh") for e in efforts)):
+        raise ValueError("请选择两个有效的思考强度")
+    return states, colors, brightness, tuple(efforts)
 
 
 def test_profile(data):
-    states, colors, brightness = validate(data)
+    states, colors, brightness, efforts = validate(data)
     if states == agent_lights.IDLE:
         raise ValueError("两个状态都为空闲时使用原灯效。请选择至少一个活动状态再测试。")
     bridge = ROOT / "HIDBridge"
@@ -45,7 +49,7 @@ def test_profile(data):
     if not bridge.is_file():
         raise ValueError("未找到 HIDBridge，请先安装本项目的 macOS 安装包。")
     with agent_lights.test_keyboard(bridge) as (board, _):
-        board.render(states, colors, brightness)
+        board.render(states, colors, brightness, efforts)
         board.display_for(6)
         side_only = board.side_only
         board.restore()
