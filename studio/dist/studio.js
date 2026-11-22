@@ -196,14 +196,6 @@ function dot(color) {
   d.style.setProperty("--color", color);
   return d;
 }
-function ink(hex) {
-  const rgb = [1, 3, 5]
-    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-    .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2] > 0.179
-    ? "#101411"
-    : "#fff";
-}
 function render() {
   const active = demoStates || [config.codex, config.claude];
   const overall = priority[Math.max(...active.map((s) => priority.indexOf(s)))];
@@ -217,14 +209,19 @@ function render() {
     input.value = config.colors[state];
     input.style.setProperty("--color", input.value);
   }
-  const side = restored || testing ? "#687568" : config.colors[overall];
-  $("board").style.setProperty(
+  const board = $("board");
+  board.style.setProperty(
+    "--led",
+    restored || testing ? "transparent" : config.colors.idle,
+  );
+  const side = restored || testing ? "#c3c7cc" : config.colors[overall];
+  board.style.setProperty(
     "--side-color",
     restored || testing
       ? side
-      : "color-mix(in srgb, " + side + " " + config.brightness + "%, #151817)",
+      : "color-mix(in srgb, " + side + " " + config.brightness + "%, #c3c7cc)",
   );
-  $("board").classList.toggle("test", testing);
+  board.classList.toggle("test", testing);
   $("side-result").replaceChildren(
     dot(side),
     restored ? "恢复原灯效" : states[overall],
@@ -233,9 +230,8 @@ function render() {
   for (const [i, product] of ["Codex", "Claude Code"].entries()) {
     const color = config.colors[active[i]];
     const key = keys.get("F" + (i + 1));
-    key.classList.toggle("indicator", !testing && !restored);
+    key.classList.toggle("indicator", !testing && active[i] !== "idle");
     key.style.setProperty("--key-color", color);
-    key.style.setProperty("--ink", ink(color));
     const item = document.createElement("span");
     item.className = "legend-item";
     item.append(
@@ -245,18 +241,18 @@ function render() {
     $("legend").append(item);
   }
   if (testing)
-    $("legend").textContent = "浅绿描边为已检测键位，亮绿色为正在按下。";
+    $("legend").textContent = "绿色描边为已检测键位，亮绿色为正在按下。";
   $("demo").textContent = demoTimer ? "停止演示" : "▷ 播放状态演示";
   $("demo").hidden = testing;
   $("lighting").hidden = testing;
   $("testing").hidden = !testing;
   $("preview").setAttribute("aria-pressed", String(!testing));
   $("test").setAttribute("aria-pressed", String(testing));
-  $("board").setAttribute(
+  board.setAttribute(
     "aria-label",
     testing
-      ? "Air75 V3 实键输入测试"
-      : "Air75 V3 灯效预览，侧灯" + $("side-result").textContent,
+      ? "Air75 V3 月虹白特别版实键输入测试"
+      : "Air75 V3 月虹白特别版灯效预览，侧灯" + $("side-result").textContent,
   );
 }
 $("demo").onclick = () => {

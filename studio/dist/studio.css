@@ -218,8 +218,8 @@ h1 {
 .board {
   --side-color: #ff8c10;
   position: relative;
-  background: linear-gradient(150deg, #3c4144, #272b2e 65%);
-  border: 1px solid #1e2021;
+  background: linear-gradient(150deg, #fcfcfd, #e4e6e8 65%, #f6f6f7);
+  border: 1px solid #abafb3;
   border-radius: 1.8cqw;
   padding: 1.15% 2.65% 1.4%;
   width: 82%;
@@ -227,10 +227,10 @@ h1 {
   margin: auto;
   container-type: inline-size;
   box-shadow:
-    inset 0 1px 1px #909491,
-    0 4px 0 #151817,
-    0 9px 6px -6px #151817bb,
-    0 17px 22px -9px #29352870;
+    inset 0 2px 2px white,
+    0 4px 0 #a8acaf,
+    0 9px 6px -6px #555b63aa,
+    0 17px 22px -9px #47534f55;
 }
 .board:before,
 .board:after {
@@ -266,46 +266,43 @@ h1 {
   font-size: 1.42cqw;
   font-weight: 600;
   line-height: 1;
-  background: linear-gradient(160deg, #585e63, #494e53);
-  color: #eceee9;
+  /* Pale switch housing beneath the diffusing cap. Screen blending lets
+     an unlit LED leave the white material visible. */
+  background-color: #c4c9cf;
+  background-image:
+    linear-gradient(148deg, #ffffffe0, #ffffff17 48%, #ffffff70),
+    radial-gradient(ellipse at 50% 58%, #9aa2ab77, transparent 57%),
+    radial-gradient(ellipse at 50% 30%, var(--led), transparent 110%);
+  background-blend-mode: normal, normal, screen;
+  color: white;
+  text-shadow: 0 1px 2px #323b4ace, 0 0 1px #35404a;
   border-radius: 0.74cqw;
-  border: 1px solid #242a2c;
+  border: 1px solid #a9b0b8;
   box-shadow:
-    inset 0 1px 1px #ffffff34,
-    inset 0 -2px 1px #0003,
-    0 1px 1px #131715;
+    inset 0 1px 2px white,
+    inset 0 -2px 2px #8994a27a,
+    0 1px 1px #727a8680;
   white-space: nowrap;
 }
 .mod,
 .keyrow:first-child .key {
   font-size: 1.18cqw;
-  background: linear-gradient(150deg, #444b50, #393e43);
-}
-.key[data-code="Escape"] {
-  background: #88c9a4;
-  color: #1c4631;
-}
-.key[data-code="Enter"] {
-  background: #df9077;
-  color: #482c20;
-}
-.key[data-code="Space"] {
-  background: #d9c273;
 }
 .key.indicator {
-  background: var(--key-color);
-  color: var(--ink);
+  --led: var(--key-color);
+  background-color: color-mix(in srgb, var(--led) 48%, #c4c9cf);
   box-shadow:
-    inset 0 -2px 1px #0003,
-    0 0 5px var(--key-color);
+    inset 0 1px 2px white,
+    inset 0 -2px 3px #85909a66,
+    0 0 0.65cqw color-mix(in srgb, var(--led) 56%, transparent);
 }
 .board.test .seen {
-  outline: 1.5px solid #97e0b3;
+  outline: 1.5px solid #397857;
   outline-offset: -3px;
 }
 .board.test .down {
-  background: #a6f2bf;
-  color: #132c20;
+  --led: #55ef98;
+  background-color: #6cce9d;
 }
 .stage-foot {
   padding: 10px 20px;
@@ -580,23 +577,6 @@ dialog code {
     margin-top: 12px;
   }
 }
-.board .keyrow .key.indicator {
-  background: var(--key-color);
-  color: var(--ink);
-}
-.board .keyrow .key[data-code="Escape"] {
-  background: #88c9a4;
-  color: #1c4631;
-}
-.board.test .keyrow .key.down {
-  background: #a6f2bf;
-  color: #132c20;
-}
-.board .keyrow .key[data-code="Insert"] {
-  background: #d9c273;
-  color: #3b341c;
-}
-
 .zoom {
   display: none;
 }

@@ -24,9 +24,11 @@ lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
 
 ## 图形化配置与测试
 
-双击 [灯光工作台](studio/dist/index.html) 即可预览 Air75 V3 的 84 键 ANSI 布局。分别选择 Codex 和 Claude Code 的状态，可查看 F1、F2 和两侧灯条如何响应。点击色块调整五种状态颜色，拖动滑块调整侧灯亮度。在「按键测试」的检测区按下实体键，可查看浏览器收到的键位。Fn、媒体键和系统快捷键的结果取决于系统是否转发事件。
+双击 [灯光工作台](studio/dist/index.html) 即可离线预览 Air75 V3 月虹白特别版的 84 键 ANSI 布局。预览按白色机身、雾透键帽和白色字符绘制，用整颗键帽的漫射光表现状态色。[NuPhy 月虹特别版设计说明](https://pay.nuphy.com/blogs/journal/air75-v3-moonbow-edition-design)
 
-浏览器会保存当前测试配置，也支持 JSON 导入与导出。网页上的改动仅用于预览和手动试灯。日常 hook 继续使用原有规则。
+分别选择 Codex 和 Claude Code 的状态，可查看 F1、F2 和两侧灯条如何响应。点击色块调整五种状态颜色，拖动滑块调整侧灯亮度。在「按键测试」的检测区按下实体键，可查看浏览器收到的键位。Fn、媒体键和系统快捷键的结果取决于系统是否转发事件。
+
+工作台在本地运行，真机测试服务仅监听 `127.0.0.1`。浏览器会保存当前测试配置，也支持 JSON 导入与导出。网页上的改动仅用于预览和手动试灯。日常 hook 继续使用原有规则。
 
 在安装本版本后，运行下方命令打开带真机测试功能的本机页面。已有旧版安装的开发机也可以在本仓库运行 `python3 -B studio_server.py`，复用已安装的 HIDBridge。
 
