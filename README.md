@@ -22,6 +22,20 @@ lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
 
 若键盘曾拔线，将它接回原 Mac/Win 档位后检查 `status`。恢复完成时 `recovery_records` 为空。卸载后程序、配置备份和恢复记录留在用户目录，便于重新启用或恢复。确认恢复后可自行删除该目录。重复安装同一份归档会复用已有程序，并保留其他 hook。用户配置路径遵循 `CODEX_HOME` 和 `CLAUDE_CONFIG_DIR`；自定义路径时请从带有这些环境变量的终端运行安装器。
 
+## 图形化配置与测试
+
+双击 [灯光工作台](studio/dist/index.html) 即可预览 Air75 V3 的 84 键 ANSI 布局。分别选择 Codex 和 Claude Code 的状态，可查看 F1、F2 和两侧灯条如何响应。点击色块调整五种状态颜色，拖动滑块调整侧灯亮度。在「按键测试」的检测区按下实体键，可查看浏览器收到的键位。Fn、媒体键和系统快捷键的结果取决于系统是否转发事件。
+
+浏览器会保存当前测试配置，也支持 JSON 导入与导出。网页上的改动仅用于预览和手动试灯。日常 hook 继续使用原有规则。
+
+在安装本版本后，运行下方命令打开带真机测试功能的本机页面。已有旧版安装的开发机也可以在本仓库运行 `python3 -B studio_server.py`，复用已安装的 HIDBridge。
+
+```sh
+"$HOME/Library/Application Support/NuPhy Agent Lights/current/lights" studio
+```
+
+打开「在键盘上测试」并点击「测试 3 秒」。需要上文所列固件与 USB 有线连接。控制器占用设备时，请等当前会话结束再试。按键接管受限时仅试亮侧灯；试灯结束后，页面显示恢复验证结果。按 Ctrl+C 关闭本机服务。
+
 ## 状态和四个入口
 
 | 指示 | 含义 |

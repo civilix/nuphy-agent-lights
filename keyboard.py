@@ -20,9 +20,9 @@ class BridgeError(RuntimeError):
 
 
 class Keyboard:
-    def __init__(self):
+    def __init__(self, bridge_path=None):
         self.proc = subprocess.Popen(
-            [Path(__file__).resolve().with_name("HIDBridge"), "--backup", DATA / "lighting.json"],
+            [bridge_path or Path(__file__).resolve().with_name("HIDBridge"), "--backup", DATA / "lighting.json"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             bufsize=0)
         self.buffer = b""
@@ -65,7 +65,8 @@ class Keyboard:
             self.restore()
         return info
 
-    def render(self, states):
+    def render(self, states, colors=None, brightness=38):
+        palette = COLORS if colors is None else colors
         if self.previous is None:
             try:
                 self.request("arm")
@@ -74,12 +75,12 @@ class Keyboard:
                     raise
                 self.side_only = True
         if not self.side_only:
-            colors = [COLORS["idle"]] * 84
-            colors[1:3] = [COLORS[state] for state in states]
-            self.request("paint", colors=colors, verify=True)
+            key_colors = [palette["idle"]] * 84
+            key_colors[1:3] = [palette[state] for state in states]
+            self.request("paint", colors=key_colors, verify=True)
         overall = max(states, key=PRIORITY.index)
         if self.previous is None or max(self.previous, key=PRIORITY.index) != overall:
-            self.request("side", color=COLORS[overall], brightness=38, expectedProfile=self.profile)
+            self.request("side", color=palette[overall], brightness=brightness, expectedProfile=self.profile)
         self.previous = states
 
     def restore(self):

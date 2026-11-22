@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f8f9f6" />
+    <title>Signal Studio · Air75 V3 灯光工作台</title>
+    <link rel="stylesheet" href="studio.css" />
+    <script src="studio.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div class="wrap mast">
+        <div class="brand">
+          <span class="mark" aria-hidden="true"
+            ><i></i><i></i><i></i><i></i></span
+          >Signal Studio
+        </div>
+        <span class="mast-note">键盘灯光工作台</span>
+        <span class="mode" id="mode"><i></i>浏览器模拟</span>
+      </div>
+    </header>
+    <main class="wrap">
+      <div class="title-row">
+        <div>
+          <div class="model-brand">NuPhy</div>
+          <h1>Air75 V3</h1>
+        </div>
+        <div class="actions">
+          <button id="reset">恢复默认</button
+          ><button class="dark" id="export">
+            <span aria-hidden="true">⤓</span> 导出配置
+          </button>
+        </div>
+      </div>
+      <section class="stage" aria-label="键盘工作区">
+        <div class="stage-head">
+          <div class="switch" aria-label="工作区模式">
+            <button id="preview" aria-pressed="true">灯光预览</button
+            ><button id="test" aria-pressed="false">按键测试</button>
+          </div>
+          <span class="spec">ANSI <b>/</b> 75% <b>/</b> 84 KEYS</span
+          ><button class="zoom" id="zoom" aria-pressed="false">放大布局</button>
+        </div>
+        <div class="canvas">
+          <div
+            class="canvas-scroll"
+            tabindex="0"
+            aria-label="键盘布局，小屏幕可横向滚动"
+          >
+            <div
+              class="board"
+              id="board"
+              role="img"
+              aria-label="Air75 V3 ANSI 键盘灯光预览"
+            ></div>
+          </div>
+        </div>
+        <div class="stage-foot">
+          <span id="legend"></span
+          ><button class="action-link" id="demo">
+            <span aria-hidden="true">▷</span> 播放状态演示
+          </button>
+        </div>
+      </section>
+      <div id="lighting" class="panels">
+        <section class="panel">
+          <h2>状态模拟</h2>
+          <div class="agent">
+            <kbd>F1</kbd><label for="codex">Codex</label
+            ><select id="codex"></select>
+          </div>
+          <div class="agent">
+            <kbd>F2</kbd><label for="claude">Claude Code</label
+            ><select id="claude"></select>
+          </div>
+          <div class="side-result">
+            <span>两侧灯条</span><strong id="side-result"></strong>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>灯光配置</h2>
+          <div class="swatches" id="swatches"></div>
+          <div class="range-line">
+            <label for="brightness">侧灯亮度</label
+            ><input type="range" id="brightness" min="0" max="100" /><output
+              for="brightness"
+              id="value"
+            ></output>
+          </div>
+        </section>
+      </div>
+      <section id="testing" class="panel testing" hidden>
+        <div>
+          <h2>实键输入测试</h2>
+          <p>点击检测区后按键，Tab 移出。Fn 和系统快捷键可能由系统接管。</p>
+        </div>
+        <button id="clear">清空记录</button>
+        <div id="capture" tabindex="0" role="group" aria-label="按键检测区">
+          <strong id="last">点击此处开始检测</strong
+          ><span id="count">已检测 0 个键位</span>
+        </div>
+      </section>
+      <footer>
+        <span id="storage">配置自动保存在此浏览器</span>
+        <div>
+          <button class="action-link" id="hardware">在键盘上测试</button
+          ><span aria-hidden="true">·</span
+          ><button class="action-link" id="import">导入配置</button
+          ><input
+            type="file"
+            id="file"
+            accept=".json,application/json"
+            hidden
+          />
+        </div>
+      </footer>
+      <div id="message" role="status"></div>
+    </main>
+    <dialog id="device">
+      <h2>在键盘上测试</h2>
+      <p id="device-help"></p>
+      <code id="launch">python3 -B studio_server.py</code>
+      <div class="dialog-actions">
+        <button id="close">关闭</button
+        ><button id="apply" class="dark" hidden>测试 3 秒</button>
+      </div>
+      <p id="device-status" role="status"></p>
+    </dialog>
+  </body>
+</html>

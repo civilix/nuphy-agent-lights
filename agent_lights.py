@@ -81,12 +81,12 @@ def owner_lock():
     return handle
 
 
-def start_worker():
+def start_worker(script=SCRIPT):
     handle = owner_lock()
     if handle:
         with handle:
             fd = handle.fileno()
-            subprocess.Popen([sys.executable, "-EsB", SCRIPT, "_worker", str(fd)], pass_fds=(fd,),
+            subprocess.Popen([sys.executable, "-EsB", script, "_worker", str(fd)], pass_fds=(fd,),
                              start_new_session=True, stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -179,31 +179,39 @@ def worker(fd):
                 board.close()
 
 
-def demo():
+@contextlib.contextmanager
+def test_keyboard(bridge_path=None):
+    """Hold the controller lock for a manual test and hand queued hooks back."""
     with database() as db:
         lock = owner_lock()
         if not lock:
-            raise RuntimeError("Lights are in use; run demo after active sessions finish")
+            raise RuntimeError("Lights are in use; run the test after active sessions finish")
         with lock:
-            board = Keyboard()
             try:
-                info = board.connect()
-                print(info["model"], info["firmwareVersion"], flush=True)
-                for states in [("working", "idle"), ("working", "waiting"), ("done", "waiting")]:
-                    board.render(states)
-                    print(states, "side" if board.side_only else "keys+side", "verified", flush=True)
-                    time.sleep(1.5)
-                result = board.restore()
-                print("restore:", result.get("verification", "side"), "verified", flush=True)
-            finally:
+                board = Keyboard(bridge_path)
                 try:
-                    board.close()
+                    yield board, board.connect()
                 finally:
-                    db.execute("BEGIN IMMEDIATE")
-                    lock.close()
-                    if snapshot(db) != IDLE or any(DATA.glob("lighting.profile-*.json")):
-                        start_worker()
-                    db.commit()
+                    board.close()
+            finally:
+                db.execute("BEGIN IMMEDIATE")
+                lock.close()
+                if snapshot(db) != IDLE or any(DATA.glob("lighting.profile-*.json")):
+                    # A source-checkout studio can borrow the installed bridge.
+                    script = bridge_path.with_name("agent_lights.py") if bridge_path else SCRIPT
+                    start_worker(script)
+                db.commit()
+
+
+def demo():
+    with test_keyboard() as (board, info):
+        print(info["model"], info["firmwareVersion"], flush=True)
+        for states in [("working", "idle"), ("working", "waiting"), ("done", "waiting")]:
+            board.render(states)
+            print(states, "side" if board.side_only else "keys+side", "verified", flush=True)
+            time.sleep(1.5)
+        result = board.restore()
+        print("restore:", result.get("verification", "side"), "verified", flush=True)
 
 
 def main():
@@ -212,7 +220,7 @@ def main():
     subs = cli.add_subparsers(dest="action", required=True)
     subs.add_parser("hook").add_argument("product", choices=PRODUCTS)
     subs.add_parser("_worker").add_argument("fd", type=int)
-    for name in ("install", "uninstall", "demo", "status", "recover"):
+    for name in ("install", "uninstall", "demo", "studio", "status", "recover"):
         subs.add_parser(name)
     args = cli.parse_args()
     if args.action == "hook":
@@ -234,6 +242,9 @@ def main():
                 db.execute("DELETE FROM sessions")
                 start_worker()
                 db.commit()
+    elif args.action == "studio":
+        from studio_server import serve
+        serve()
     elif args.action == "demo":
         demo()
     elif args.action == "recover":
