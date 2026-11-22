@@ -87,7 +87,7 @@ const rows = [
     ...[..."1234567890"].map((n) => ["Digit" + n, n]),
     ["Minus", "-"],
     ["Equal", "="],
-    ["Backspace", "delete", 8],
+    ["Backspace", "backspace", 8],
     ["PageUp", "PgUp"],
   ],
   [
@@ -142,7 +142,7 @@ for (const row of rows) {
     keys.set(code, key);
     el.append(key);
   }
-  $("board").append(el);
+  $("key-deck").append(el);
 }
 for (const id of ["codex", "claude"]) {
   for (const [value, label] of Object.entries(states))

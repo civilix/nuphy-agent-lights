@@ -24,7 +24,7 @@ lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
 
 ## 图形化配置与测试
 
-双击 [灯光工作台](studio/dist/index.html) 即可离线预览 Air75 V3 月虹白特别版的 84 键 ANSI 布局。预览按白色机身、雾透键帽和白色字符绘制，用整颗键帽的漫射光表现状态色。[NuPhy 月虹特别版设计说明](https://pay.nuphy.com/blogs/journal/air75-v3-moonbow-edition-design)
+双击 [灯光工作台](studio/dist/index.html) 即可离线预览 Air75 V3 月虹白特别版的 84 键 ANSI 布局。预览按 318.9 × 128.9 mm 的机身比例绘制，采用白色机身、雾透键帽和白色字符，用整颗键帽的漫射光表现状态色。[Air75 V3 规格](https://pay.nuphy.com/products/nuphy-air75-v3) · [NuPhy 月虹特别版设计说明](https://pay.nuphy.com/blogs/journal/air75-v3-moonbow-edition-design)
 
 分别选择 Codex 和 Claude Code 的状态，可查看 F1、F2 和两侧灯条如何响应。点击色块调整五种状态颜色，拖动滑块调整侧灯亮度。在「按键测试」的检测区按下实体键，可查看浏览器收到的键位。Fn、媒体键和系统快捷键的结果取决于系统是否转发事件。
 
@@ -56,6 +56,8 @@ hook 从标准输入提取生命周期信息，用本机 SQLite 事务按产品�
 ## 灯控协议与验收
 
 有线接口为 `19f5:1028`，usage page 1、usage 0。已读回 22 字节灯效状态和 104 个 RGB 值。84 个键盘灯位采用自定义灯效 21 和 `D8` 更新，用 `D2` 验证；左右共 20 个侧灯灯位作为单一区，通过 `D6` 写偏移 9 的 8 字节设置，并用 `D5` 回读。按键模式接管整块背光，其他键使用低亮背景。若当前主灯设置无法可靠恢复，控制器可只接管侧灯。[NuPhy Lab 固件说明](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/docs/RELEASE_1.2.50.md) · [原生 HID 实现](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/native/HIDBridge.swift)
+
+已通过 NuPhy IO 保存到键盘的原生宏，预期在接管灯光期间仍可触发。控制器通过非独占 HID 连接更新 RGB，F1 和 F2 只作为灯光位置使用。实机在试灯前、试灯中和恢复后读回的当前层 98 个键位条目一致，宏动作本身尚未按键验证。需要编辑或绑定宏时，等灯光恢复后打开 NuPhy IO。[NuPhy 宏设置说明](https://helpcenter.nuphy.com/?lang=en&variant=standard)
 
 本机实测已验证逐键和侧灯配置写入、等待优先级及原灯效恢复。可通过 `demo` 检查具体键位和亮度。在另一台 Mac 验收四个入口时，分别运行一轮「提交 → 等待审批 → 继续 → 结束」，用 `status` 核对事件及硬件状态，再让一个会话等待、另一个会话结束，观察侧灯是否保持琥珀色。
 
