@@ -1,6 +1,8 @@
 # NuPhy Agent Lights
 
-用 NuPhy Air75 V3 的 F1 显示 Codex 状态，F2 显示 Claude Code 状态。左右灯条一起显示所有会话中最需要关注的状态。设备范围为 **Apple Silicon Mac、macOS 13 或更高版本、USB 有线模式、Air75 V3 ANSI 官方固件 2.0.0.7**。开发与实机验证使用月虹白特别版。
+用 NuPhy Air75 V3 的按键背光画出两个工具。左侧蓝色的 `>_` 代表 Codex，运行时光标闪动。右侧珊瑚橙的小方块是 Claude Code 的四足像素吉祥物，运行时交替迈步。等待、完成和出错时，对应的图案定格；空闲时图案消失。两者可以同时显示。F1 和 F2 分别显示两个工具的状态色，左右灯条一起显示最需要关注的状态。
+
+设备范围为 **Apple Silicon Mac、macOS 13 或更高版本、USB 有线模式、Air75 V3 ANSI 官方固件 2.0.0.7**。开发与实机验证使用月虹白特别版。
 
 ## 在另一台 Mac 上安装
 
@@ -26,9 +28,9 @@ lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
 
 双击 [灯光工作台](studio/dist/index.html) 即可离线预览 Air75 V3 月虹白特别版的 84 键 ANSI 布局。预览按 318.9 × 128.9 mm 的机身比例绘制，采用白色机身、雾透键帽和白色字符，用整颗键帽的漫射光表现状态色。[Air75 V3 规格](https://pay.nuphy.com/products/nuphy-air75-v3) · [NuPhy 月虹特别版设计说明](https://pay.nuphy.com/blogs/journal/air75-v3-moonbow-edition-design)
 
-分别选择 Codex 和 Claude Code 的状态，可查看 F1、F2 和两侧灯条如何响应。点击色块调整五种状态颜色，拖动滑块调整侧灯亮度。在「按键测试」的检测区按下实体键，可查看浏览器收到的键位。Fn、媒体键和系统快捷键的结果取决于系统是否转发事件。
+将两个工具都选为「运行中」，即可同时预览闪动的光标和迈步的小脚。浏览器启用「减少动态效果」时显示静态姿势。点击色块可调整背景和状态指示色，拖动滑块调整侧灯亮度。在「按键测试」的检测区按下实体键，可查看浏览器收到的键位。Fn、媒体键和系统快捷键的结果取决于系统是否转发事件。
 
-工作台在本地运行，真机测试服务仅监听 `127.0.0.1`。浏览器会保存当前测试配置，也支持 JSON 导入与导出。网页上的改动仅用于预览和手动试灯。日常 hook 继续使用原有规则。
+工作台在本地运行，真机测试服务仅监听 `127.0.0.1`。浏览器会保存当前测试配置，也支持 JSON 导入与导出。工作台的状态色和亮度用于预览和手动试灯。日常 hook 使用相同的像素动画及默认状态色。
 
 在安装本版本后，运行下方命令打开带真机测试功能的本机页面。已有旧版安装的开发机也可以在本仓库运行 `python3 -B studio_server.py`，复用已安装的 HIDBridge。
 
@@ -43,7 +45,7 @@ lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
 | 指示 | 含义 |
 | --- | --- |
 | F1、F2 | 分别汇总 Codex、Claude Code 的本地会话，包括 Desktop 和 CLI |
-| 蓝色 | 有会话正在运行 |
+| 蓝色状态灯 | 有会话正在运行 |
 | 琥珀色 | 有会话等待审批或同步提问的答复 |
 | 红色 | 收到 Claude Code 的 `StopFailure`，提示 5 秒 |
 | 绿色 | 主会话本轮结束，提示 5 秒 |
@@ -58,6 +60,8 @@ hook 从标准输入提取生命周期信息，用本机 SQLite 事务按产品�
 有线接口为 `19f5:1028`，usage page 1、usage 0。已读回 22 字节灯效状态和 104 个 RGB 值。84 个键盘灯位采用自定义灯效 21 和 `D8` 更新，用 `D2` 验证；左右共 20 个侧灯灯位作为单一区，通过 `D6` 写偏移 9 的 8 字节设置，并用 `D5` 回读。按键模式接管整块背光，其他键使用低亮背景。若当前主灯设置无法可靠恢复，控制器可只接管侧灯。[NuPhy Lab 固件说明](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/docs/RELEASE_1.2.50.md) · [原生 HID 实现](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/native/HIDBridge.swift)
 
 已通过 NuPhy IO 保存到键盘的原生宏，预期在接管灯光期间仍可触发。控制器通过非独占 HID 连接更新 RGB，F1 和 F2 只作为灯光位置使用。实机在试灯前、试灯中和恢复后读回的当前层 98 个键位条目一致，宏动作本身尚未按键验证。需要编辑或绑定宏时，等灯光恢复后打开 NuPhy IO。[NuPhy 宏设置说明](https://helpcenter.nuphy.com/?lang=en&variant=standard)
+
+状态变化时控制器回读完整画面。运行中约每半秒切换一次姿势，驱动只写入有变化的灯位并核对回执。按键接管受限时，侧灯仍可显示状态，像素图案需要逐键模式。[Air75 V3 灯位表](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/shared/air75-v3-ansi.json)
 
 本机实测已验证逐键和侧灯配置写入、等待优先级及原灯效恢复。可通过 `demo` 检查具体键位和亮度。在另一台 Mac 验收四个入口时，分别运行一轮「提交 → 等待审批 → 继续 → 结束」，用 `status` 核对事件及硬件状态，再让一个会话等待、另一个会话结束，观察侧灯是否保持琥珀色。
 

@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from lifecycle import PRIORITY
+from pixels import FRAME_SECONDS, key_frame
 
 DATA = Path.home() / "Library/Application Support/NuPhy Agent Lights"
 COLORS = {"idle": "#090909", "working": "#1466C8", "waiting": "#FF8C10",
@@ -75,19 +76,36 @@ class Keyboard:
                     raise
                 self.side_only = True
         if not self.side_only:
-            key_colors = [palette["idle"]] * 84
-            key_colors[1:3] = [palette[state] for state in states]
-            self.request("paint", colors=key_colors, verify=True)
+            self.request("paint", colors=key_frame(states, palette, 0), verify=True)
         overall = max(states, key=PRIORITY.index)
         if self.previous is None or max(self.previous, key=PRIORITY.index) != overall:
             self.request("side", color=palette[overall], brightness=brightness, expectedProfile=self.profile)
         self.previous = states
+        self.palette = palette
+        self.phase = 0
+        self.next_frame = time.monotonic() + FRAME_SECONDS
+
+    def animate(self):
+        if self.side_only or not self.previous or "working" not in self.previous:
+            return
+        if time.monotonic() >= self.next_frame:
+            self.phase ^= 1
+            self.request("paint", colors=key_frame(self.previous, self.palette, self.phase), verify=False)
+            self.next_frame = time.monotonic() + FRAME_SECONDS
+
+    def display_for(self, seconds):
+        deadline = time.monotonic() + seconds
+        while (remaining := deadline - time.monotonic()) > 0:
+            time.sleep(min(remaining, FRAME_SECONDS))
+            if time.monotonic() < deadline:
+                self.animate()
 
     def restore(self):
         result = self.request("restore", expectedProfile=self.profile)
         if not result.get("verified"):
             raise RuntimeError("HID restoration did not verify")
         self.previous = None
+        self.side_only = False
         return result
 
     def close(self):

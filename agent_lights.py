@@ -161,11 +161,13 @@ def worker(fd):
                         hardware_status(mode="side" if board.side_only else "keys+side",
                                         codex=states[0], claude=states[1])
                         next_health = time.monotonic() + 5
-                    elif time.monotonic() >= next_health:
-                        status = board.request("status")
-                        if not status.get("protocolReady") or status.get("lightingProfile") != board.profile:
-                            raise RuntimeError("Keyboard disconnected or changed profile")
-                        next_health = time.monotonic() + 5
+                    else:
+                        if time.monotonic() >= next_health:
+                            status = board.request("status")
+                            if not status.get("protocolReady") or status.get("lightingProfile") != board.profile:
+                                raise RuntimeError("Keyboard disconnected or changed profile")
+                            next_health = time.monotonic() + 5
+                        board.animate()
                 except (OSError, RuntimeError, ValueError) as exc:
                     hardware_status(mode="retry", error=str(exc))
                     if board:
@@ -206,10 +208,10 @@ def test_keyboard(bridge_path=None):
 def demo():
     with test_keyboard() as (board, info):
         print(info["model"], info["firmwareVersion"], flush=True)
-        for states in [("working", "idle"), ("working", "waiting"), ("done", "waiting")]:
+        for states in [("working", "working"), ("working", "waiting"), ("done", "waiting")]:
             board.render(states)
             print(states, "side" if board.side_only else "keys+side", "verified", flush=True)
-            time.sleep(1.5)
+            board.display_for(2)
         result = board.restore()
         print("restore:", result.get("verification", "side"), "verified", flush=True)
 

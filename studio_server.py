@@ -4,7 +4,6 @@ import json
 import os
 import re
 import secrets
-import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,6 +13,7 @@ from keyboard import COLORS, DATA
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = {"": ("index.html", "text/html; charset=utf-8"),
+          "pixels.js": ("pixels.js", "text/javascript"),
           "studio.css": ("studio.css", "text/css"),
           "studio.js": ("studio.js", "text/javascript")}
 
@@ -46,9 +46,10 @@ def test_profile(data):
         raise ValueError("未找到 HIDBridge，请先安装本项目的 macOS 安装包。")
     with agent_lights.test_keyboard(bridge) as (board, _):
         board.render(states, colors, brightness)
-        time.sleep(3)
+        board.display_for(3)
+        side_only = board.side_only
         board.restore()
-        return "侧灯测试完成，已验证恢复原灯效。" if board.side_only else "按键与侧灯测试完成，已验证恢复原灯效。"
+        return "侧灯测试完成，已验证恢复原灯效。" if side_only else "按键与侧灯测试完成，已验证恢复原灯效。"
 
 
 class Handler(BaseHTTPRequestHandler):

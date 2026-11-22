@@ -12,7 +12,7 @@ const priority = ["idle", "done", "working", "error", "waiting"];
 const factory = {
   version: 1,
   codex: "working",
-  claude: "waiting",
+  claude: "working",
   brightness: 38,
   colors: {
     working: "#1466C8",
@@ -178,7 +178,7 @@ let testing = false;
 let demoTimer = null;
 let demoStates = null;
 const demoFrames = [
-  ["working", "idle"],
+  ["working", "working"],
   ["working", "waiting"],
   ["done", "waiting"],
   ["idle", "error"],
@@ -196,6 +196,35 @@ function dot(color) {
   d.style.setProperty("--color", color);
   return d;
 }
+let pixelTimer;
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+function showPixels(active) {
+  clearInterval(pixelTimer);
+  let phase = 0;
+  function draw() {
+    const lit = new Map();
+    for (const [i, sprite] of pixelArt.sprites.entries()) {
+      const state = active[i];
+      if (testing || state === "idle") continue;
+      const pose = sprite.poses[state === "working" ? phase : 0];
+      for (const code of [...sprite.body, ...pose]) lit.set(code, sprite.color);
+      lit.set("F" + (i + 1), config.colors[state]);
+    }
+    for (const [code, key] of keys) {
+      key.classList.toggle("indicator", lit.has(code));
+      if (lit.has(code)) key.style.setProperty("--key-color", lit.get(code));
+    }
+  }
+  draw();
+  if (!testing && !document.hidden && !reducedMotion.matches && active.includes("working")) {
+    pixelTimer = setInterval(() => {
+      phase ^= 1;
+      draw();
+    }, pixelArt.frameMs);
+  }
+}
+reducedMotion.addEventListener("change", render);
+document.addEventListener("visibilitychange", render);
 function render() {
   const active = demoStates || [config.codex, config.claude];
   const overall = priority[Math.max(...active.map((s) => priority.indexOf(s)))];
@@ -222,21 +251,19 @@ function render() {
       : "color-mix(in srgb, " + side + " " + config.brightness + "%, #c3c7cc)",
   );
   board.classList.toggle("test", testing);
+  showPixels(active);
   $("side-result").replaceChildren(
     dot(side),
     restored ? "恢复原灯效" : states[overall],
   );
   $("legend").replaceChildren();
   for (const [i, product] of ["Codex", "Claude Code"].entries()) {
-    const color = config.colors[active[i]];
-    const key = keys.get("F" + (i + 1));
-    key.classList.toggle("indicator", !testing && active[i] !== "idle");
-    key.style.setProperty("--key-color", color);
+    const sprite = pixelArt.sprites[i];
     const item = document.createElement("span");
     item.className = "legend-item";
     item.append(
-      dot(restored ? side : color),
-      key.textContent + " " + product + " · " + states[active[i]],
+      dot(active[i] === "idle" ? "#c3c7cc" : sprite.color),
+      product + " · " + states[active[i]],
     );
     $("legend").append(item);
   }
