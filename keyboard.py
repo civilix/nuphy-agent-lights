@@ -15,6 +15,13 @@ COLORS = {"idle": "#090909", "working": "#1466C8", "waiting": "#FF8C10",
           "done": "#18AE54", "error": "#EF2842"}
 
 
+def working_brightness(states, usage):
+    percent = max((p for p in usage if p is not None), default=None)
+    if max(states, key=PRIORITY.index) == "working" and percent is not None:
+        return 15 + (85 * percent + 50) // 100
+    return 38
+
+
 class BridgeError(RuntimeError):
     def __init__(self, code, message):
         super().__init__(f"{code}: {message}")
@@ -80,13 +87,18 @@ class Keyboard:
             self.phase = 0
         if not self.side_only:
             self.request("paint", colors=key_frame(states, palette, self.phase, efforts), verify=True)
-        overall = max(states, key=PRIORITY.index)
-        if self.previous is None or max(self.previous, key=PRIORITY.index) != overall:
-            self.request("side", color=palette[overall], brightness=brightness, expectedProfile=self.profile)
+        self.set_side(states, palette, brightness)
         self.previous = states
         self.efforts = efforts
         self.palette = palette
         self.next_frame = time.monotonic() + FRAME_SECONDS
+
+    def set_side(self, states, palette, brightness):
+        color = palette[max(states, key=PRIORITY.index)]
+        if self.previous is None or self.side_brightness != brightness or self.side_color != color:
+            self.request("side", color=color, brightness=brightness, expectedProfile=self.profile)
+            self.side_brightness = brightness
+            self.side_color = color
 
     def animate(self):
         if self.side_only or not self.previous or "working" not in self.previous:

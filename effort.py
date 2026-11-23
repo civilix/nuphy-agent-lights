@@ -1,4 +1,4 @@
-"""Read the selected reasoning effort from local client metadata."""
+"""Read reasoning effort and context usage from local client metadata."""
 import json
 import os
 from functools import lru_cache
@@ -26,39 +26,61 @@ def codex_transcript(raw_path, sid):
     return None
 
 
-def turn_effort(raw_path, sid, turn):
+def codex_metadata(raw_path, sid, turn):
     path = codex_transcript(raw_path, sid)
-    if not path or not isinstance(turn, str) or not turn:
-        return None
-    try:
-        stat = Path(path).stat()
-        if S_ISREG(stat.st_mode):
-            return _read_context(path, turn, stat.st_size, stat.st_mtime_ns)
-    except (OSError, ValueError):
-        pass
+    if path:
+        try:
+            stat = Path(path).stat()
+            if S_ISREG(stat.st_mode):
+                return _read_metadata(path, turn if isinstance(turn, str) else None, stat.st_size, stat.st_mtime_ns)
+        except (OSError, ValueError):
+            pass
+    return None, None
+
+
+def context_percent(info):
+    last = info.get("last_token_usage")
+    used = last.get("total_tokens") if isinstance(last, dict) else None
+    window = info.get("model_context_window")
+    if type(used) is int and used >= 0 and type(window) is int and window > 0:
+        return min(100, (100 * used + window // 2) // window)
     return None
 
 
 @lru_cache(maxsize=64)
-def _read_context(path, turn, size, mtime_ns):
-    # Include the modification time in the key so a late write triggers a retry.
-    try:
-        with open(path, "rb") as stream:
-            start = max(0, size - 1024 * 1024)
-            stream.seek(start)
-            lines = stream.read(size - start).splitlines()
-        for line in reversed(lines[1:] if start else lines):
-            if b'"turn_context"' not in line[:160]:
-                continue
-            try:
-                record = json.loads(line)
-            except (UnicodeError, ValueError):
-                continue
-            if not isinstance(record, dict) or record.get("type") != "turn_context":
-                continue
-            context = record.get("payload")
-            if isinstance(context, dict) and context.get("turn_id") == turn:
-                return known_level(context.get("effort"))
-    except (OSError, ValueError):
-        pass
-    return None
+def _read_metadata(path, turn, size, mtime_ns):
+    # Read a bounded tail, then cache only the effort and percentage.
+    with open(path, "rb") as stream:
+        start = max(0, size - 1024 * 1024)
+        stream.seek(max(0, start - 1))
+        if start and stream.read(1) != b"\n":
+            stream.readline(size - start)
+        lines = stream.read(max(0, size - stream.tell())).splitlines()
+    level = percent = None
+    # Forward order lets compaction invalidate the previous context estimate.
+    markers = (b'"turn_context"', b'"token_count"', b'"compacted"')
+    for line in lines:
+        if not any(marker in line[:240] for marker in markers):
+            continue
+        try:
+            record = json.loads(line)
+        except (ValueError, UnicodeError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        kind = record.get("type")
+        event = record.get("payload")
+        if kind == "compacted":
+            percent = None
+        elif isinstance(event, dict):
+            if kind == "turn_context" and turn and event.get("turn_id") == turn:
+                level = known_level(event.get("effort"))
+            elif kind == "event_msg" and event.get("type") == "token_count":
+                info = event.get("info")
+                if isinstance(info, dict):  # Some events only update rate limits.
+                    percent = context_percent(info)
+    return level, percent
+
+
+def turn_effort(raw_path, sid, turn):
+    return codex_metadata(raw_path, sid, turn)[0]

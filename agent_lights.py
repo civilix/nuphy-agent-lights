@@ -13,9 +13,9 @@ import tempfile
 import time
 from pathlib import Path
 
-from keyboard import DATA, Keyboard
-from effort import LEVELS, codex_transcript, known_level, turn_effort
-from lifecycle import EVENTS, PRODUCTS, reduce_event, summarize
+from keyboard import DATA, Keyboard, working_brightness
+from effort import LEVELS, codex_metadata, codex_transcript, known_level
+from lifecycle import EVENTS, LIVE_SECONDS, PRODUCTS, reduce_event, summarize
 from pixels import FRAME_SECONDS
 
 SCRIPT = Path(__file__).resolve()
@@ -29,6 +29,7 @@ def database():
     try:
         db.execute("CREATE TABLE IF NOT EXISTS sessions(product, sid, expires REAL, state TEXT, PRIMARY KEY(product,sid))")
         db.execute("CREATE TABLE IF NOT EXISTS receipts(product PRIMARY KEY, event, received REAL)")
+        db.execute("CREATE TABLE IF NOT EXISTS claude_context(sid TEXT PRIMARY KEY, percent INTEGER, updated REAL)")
         yield db
     finally:
         db.close()
@@ -51,7 +52,7 @@ def client_pid(product):
     return None
 
 
-def snapshot(db, retire_exited=False, with_efforts=False, refresh=False):
+def snapshot(db, retire_exited=False, with_efforts=False, refresh=False, with_context=False):
     rows = db.execute("SELECT product,sid,state FROM sessions WHERE expires>?", (time.time(),)).fetchall()
     active = []
     for product, sid, raw in rows:
@@ -63,21 +64,33 @@ def snapshot(db, retire_exited=False, with_efforts=False, refresh=False):
                 if retire_exited:
                     db.execute("DELETE FROM sessions WHERE product=? AND sid=? AND state=?", (product, sid, raw))
                 continue
-        if refresh and product == "codex" and row["state"] == "working" and not row.get("effort"):
-            level = turn_effort(row.get("transcript"), sid, row.get("turn"))
+        if refresh and product == "codex" and row["state"] == "working":
+            previous = row.copy()
+            level, percent = codex_metadata(row.get("transcript"), sid, row.get("turn"))
             if level:
                 row["effort"] = level
+            row["context_percent"] = percent
+            if previous != row:
                 db.execute("UPDATE sessions SET state=? WHERE product=? AND sid=? AND state=?",
                            (json.dumps(row), product, sid, raw))
+        if with_context and product == "claude" and row["state"] == "working":
+            value = db.execute("SELECT percent FROM claude_context WHERE sid=? AND updated>?",
+                               (sid, time.time() - LIVE_SECONDS)).fetchone()
+            row["context_percent"] = value[0] if value else None
         active.append((product, row))
     states = summarize(active)
-    if not with_efforts:
+    if not (with_efforts or with_context):
         return states
     efforts = []
     for product, state in zip(PRODUCTS, states):
         levels = [row["effort"] for p, row in active if p == product and state == row["state"] == "working"
                   and known_level(row.get("effort"))]
         efforts.append(max(levels, key=LEVELS.index, default=None))
+    if with_context:
+        usage = tuple(max((row["context_percent"] for p, row in active
+                           if p == product and row["state"] == "working" and row.get("context_percent") is not None),
+                          default=None) for product in PRODUCTS)
+        return states, tuple(efforts), usage
     return states, tuple(efforts)
 
 
@@ -129,7 +142,7 @@ def apply_hook(product, event):
                     level = level or known_level(os.environ.get("CLAUDE_EFFORT"))
                     if level:
                         row["effort"] = level
-                elif event.get("turn_id") == row.get("turn") and not row.get("effort"):
+                elif not row.get("transcript") and (not event.get("turn_id") or event["turn_id"] == row.get("turn")):
                     path = codex_transcript(event.get("transcript_path"), sid)
                     if path:
                         row["transcript"] = path
@@ -146,6 +159,32 @@ def apply_hook(product, event):
         db.commit()
 
 
+def claude_statusline(stream, passthrough):
+    raw = stream.read()
+    if passthrough:
+        # The user's original command receives the identical JSON on stdin.
+        sys.stdout.buffer.write(raw)
+        sys.stdout.buffer.flush()
+    try:
+        event = json.loads(raw)
+        if not isinstance(event, dict) or not isinstance(event.get("session_id"), str) or not event["session_id"]:
+            return
+        window = event.get("context_window")
+        percent = window.get("used_percentage") if isinstance(window, dict) else None
+        if type(percent) not in (int, float) or not 0 <= percent <= 100:
+            percent = None
+        else:
+            percent = round(percent)
+        now = time.time()
+        with database() as db, db:
+            db.execute("DELETE FROM claude_context WHERE updated<=?", (now - LIVE_SECONDS,))
+            db.execute("INSERT INTO claude_context VALUES(?,?,?) ON CONFLICT(sid) DO UPDATE "
+                       "SET percent=excluded.percent, updated=excluded.updated WHERE updated<=excluded.updated",
+                       (event["session_id"], percent, now))
+    except (OSError, ValueError, sqlite3.Error):
+        pass  # A telemetry failure must not break the user's status line.
+
+
 def worker(fd):
     stopping = False
 
@@ -157,15 +196,16 @@ def worker(fd):
     signal.signal(signal.SIGINT, stop)
     board = None
     next_health = 0
-    next_effort = 0
+    next_metadata = 0
     with database() as db, os.fdopen(fd, "a") as owner:
         try:
             while not stopping:
-                refresh = time.monotonic() >= next_effort
+                refresh = time.monotonic() >= next_metadata
                 with db:
-                    states, efforts = snapshot(db, with_efforts=True, refresh=refresh)
+                    states, efforts, usage = snapshot(db, with_context=True, refresh=refresh)
+                brightness = working_brightness(states, usage)
                 if refresh:
-                    next_effort = time.monotonic() + 1
+                    next_metadata = time.monotonic() + 1
                 pending = any(DATA.glob("lighting.profile-*.json"))
                 try:
                     if not board and (pending or states != IDLE):
@@ -189,10 +229,15 @@ def worker(fd):
                         db.commit()
                         if pending:
                             time.sleep(3)
-                    elif board.previous != states or board.efforts != efforts:
-                        board.render(states, efforts=efforts)
+                    elif board.previous != states or board.efforts != efforts or board.side_brightness != brightness:
+                        if board.previous != states or board.efforts != efforts:
+                            board.render(states, brightness=brightness, efforts=efforts)
+                        else:
+                            board.set_side(states, board.palette, brightness)
+                            board.animate()
                         hardware_status(mode="side" if board.side_only else "keys+side",
-                                        codex=states[0], claude=states[1], effort=dict(zip(PRODUCTS, efforts)))
+                                        codex=states[0], claude=states[1], effort=dict(zip(PRODUCTS, efforts)),
+                                        context_percent=dict(zip(PRODUCTS, usage)), side_brightness=brightness)
                         next_health = time.monotonic() + 5
                     else:
                         if time.monotonic() >= next_health:
@@ -241,12 +286,17 @@ def test_keyboard(bridge_path=None):
 def demo():
     with test_keyboard() as (board, info):
         print(info["model"], info["firmwareVersion"], flush=True)
-        for states, efforts, seconds in [(("working", "working"), ("low", "medium"), 2),
-                                         (("working", "working"), ("high", "xhigh"), 6),
-                                         (("working", "waiting"), ("xhigh", None), 2),
-                                         (("done", "waiting"), (None, None), 2)]:
-            board.render(states, efforts=efforts)
-            print(states, efforts, "side" if board.side_only else "keys+side", "verified", flush=True)
+        samples = [
+            (("working", "working"), ("low", "medium"), (10, 25), 2),
+            (("working", "working"), ("high", "xhigh"), (90, 70), 6),
+            (("working", "waiting"), ("xhigh", None), (90, None), 2),
+            (("done", "waiting"), (None, None), (None, None), 2),
+        ]
+        for states, efforts, usage, seconds in samples:
+            brightness = working_brightness(states, usage)
+            board.render(states, brightness=brightness, efforts=efforts)
+            print(states, efforts, "context", usage, "side brightness", brightness,
+                  "side" if board.side_only else "keys+side", "verified", flush=True)
             board.display_for(seconds)
         result = board.restore()
         print("restore:", result.get("verification", "side"), "verified", flush=True)
@@ -257,6 +307,7 @@ def main():
     cli = argparse.ArgumentParser(description=__doc__)
     subs = cli.add_subparsers(dest="action", required=True)
     subs.add_parser("hook").add_argument("product", choices=PRODUCTS)
+    subs.add_parser("claude-statusline").add_argument("--passthrough", action="store_true")
     subs.add_parser("_worker").add_argument("fd", type=int)
     for name in ("install", "uninstall", "demo", "studio", "status", "recover"):
         subs.add_parser(name)
@@ -267,6 +318,8 @@ def main():
         except (ValueError, OSError, sqlite3.Error) as exc:
             print(f"NuPhy light event skipped: {type(exc).__name__}", file=sys.stderr)
         print("{}")
+    elif args.action == "claude-statusline":
+        claude_statusline(sys.stdin.buffer, args.passthrough)
     elif args.action == "_worker":
         worker(args.fd)
     elif args.action in ("install", "uninstall"):
@@ -278,6 +331,7 @@ def main():
             with database() as db:
                 db.execute("BEGIN IMMEDIATE")
                 db.execute("DELETE FROM sessions")
+                db.execute("DELETE FROM claude_context")
                 start_worker()
                 db.commit()
     elif args.action == "studio":
@@ -289,14 +343,16 @@ def main():
         with database() as db:
             db.execute("BEGIN IMMEDIATE")
             db.execute("DELETE FROM sessions")
+            db.execute("DELETE FROM claude_context")
             start_worker()
             db.commit()
         print("Active indicators cleared. Check status for verified restoration.")
     else:
         with database() as db:
             status = DATA / "hardware.json"
-            states, efforts = snapshot(db, with_efforts=True)
+            states, efforts, usage = snapshot(db, with_context=True, refresh=True)
             print(json.dumps(dict(sessions=dict(zip(PRODUCTS, states)), effort=dict(zip(PRODUCTS, efforts)),
+                                  context_percent=dict(zip(PRODUCTS, usage)),
                                   last_hooks={p: dict(event=e, at=t) for p, e, t in db.execute(
                                       "SELECT product,event,received FROM receipts")},
                                   last_hardware=json.loads(status.read_text()) if status.exists() else None,

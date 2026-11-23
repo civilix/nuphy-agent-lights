@@ -10,7 +10,7 @@ export CLAUDE_CONFIG_DIR="$HOME/claude settings"
 export PATH=/usr/bin:/bin
 mkdir -p "$CODEX_HOME" "$CLAUDE_CONFIG_DIR" "$work/Downloads"
 echo '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"true"}]}]}}' > "$CODEX_HOME/hooks.json"
-echo '{"language":"Chinese"}' > "$CLAUDE_CONFIG_DIR/settings.json"
+echo '{"language":"Chinese","statusLine":{"type":"command","command":"cat","padding":2}}' > "$CLAUDE_CONFIG_DIR/settings.json"
 tar -xzf "$archive" -C "$work/Downloads"
 installer="$work/Downloads/NuPhy-Agent-Lights-macOS-arm64/install.command"
 "$installer"
@@ -19,7 +19,7 @@ mv "$work/Downloads" "$work/moved download"
 app="$HOME/Library/Application Support/NuPhy Agent Lights/current"
 "$app/lights" status >/dev/null
 "$app/python/bin/python3" -EsB - <<'PY'
-import json, os, subprocess
+import json, os, sqlite3, subprocess
 from pathlib import Path
 root = Path.home() / "Library/Application Support/NuPhy Agent Lights"
 assert len(list((root / "versions").iterdir())) == 1
@@ -30,6 +30,11 @@ for product, env, filename in [("codex", "CODEX_HOME", "hooks.json"), ("claude",
     command = entries[0]["hooks"][0]["command"]
     out = subprocess.check_output(command, shell=True, input=b'{"session_id":"test","hook_event_name":"SessionEnd"}')
     assert json.loads(out) == {}
+line = json.loads((Path(os.environ["CLAUDE_CONFIG_DIR"]) / "settings.json").read_text())["statusLine"]
+sample = b'{"session_id":"test","context_window":{"used_percentage":73}}\n'
+assert line["padding"] == 2 and subprocess.check_output(line["command"], shell=True, input=sample) == sample
+with sqlite3.connect(root / "sessions.sqlite") as db:
+    assert db.execute("SELECT percent FROM claude_context WHERE sid='test'").fetchone() == (73,)
 status = json.loads(subprocess.check_output([root / "current/lights", "status"]))
 assert all(status["last_hooks"][p]["event"] == "SessionEnd" for p in ("codex", "claude"))
 PY
@@ -40,6 +45,7 @@ from pathlib import Path
 codex = json.loads((Path(os.environ["CODEX_HOME"]) / "hooks.json").read_text())
 claude = json.loads((Path(os.environ["CLAUDE_CONFIG_DIR"]) / "settings.json").read_text())
 assert codex["hooks"] == {"Stop":[{"hooks":[{"type":"command","command":"true"}]}]}
+assert claude["statusLine"] == {"type":"command","command":"cat","padding":2}
 assert claude["language"] == "Chinese" and not claude.get("hooks")
 PY
 echo 'Portable install, repeated install, relocated download, both hooks and uninstall verified.'

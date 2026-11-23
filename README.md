@@ -6,6 +6,10 @@ Codex 运行时，蓝光沿 Air75 V3 最外圈顺时针移动。Claude Code 用�
 
 Claude Code 从 hook 提供的 `effort.level` 或 `CLAUDE_EFFORT` 取得档位。Codex 从 hook 指向的本地会话文件末尾最多 1 MiB 查找与本轮 ID 匹配的 `turn_context.effort`。这个文件格式可能随客户端更新。缺少匹配记录时先用四格追光，运行期间取得有效档位后自动切换。`lights status` 的 `effort` 显示当前运行档位，未知或非运行状态显示 `null`。这些信号反映配置档位，实时算力和思考内容不在数据中。[OpenAI Docs](https://learn.chatgpt.com/docs/hooks) · [Claude Code Hooks](https://code.claude.com/docs/en/hooks)
 
+运行时，两侧蓝灯一起显示上下文窗口占用率。占用 0%、50%、100% 时，亮度分别为 15%、58%、100%。有多个运行中的会话时取已知占用率的最大值；尚无读数时使用 38% 亮度。等待审批、出错和完成仍按原有优先级显示状态色，全部空闲后恢复原灯效。可运行 `lights status` 查看 `context_percent` 中每个工具的最高运行占用率，`null` 表示没有读数。
+
+Codex 约每秒检查当前会话记录末尾 1 MiB，取最近一次请求的 `last_token_usage.total_tokens / model_context_window` 估算占用率。上下文压缩后，亮度可随新读数降低。Claude Code CLI 直接读取状态栏的 `context_window.used_percentage`。安装器会接入用户级状态栏，已有的命令会继续收到原始输入并显示自己的输出，卸载时还原。项目级设置覆盖状态栏、或客户端未发送状态栏数据时（包括部分 Desktop 会话），该会话没有可用读数。新设备仍需本机灯控程序。[Claude Code 状态栏文档](https://code.claude.com/docs/en/statusline#context-window-fields)
+
 设备范围为 **Apple Silicon Mac、macOS 13 或更高版本、USB 有线模式、Air75 V3 ANSI 官方固件 2.0.0.7**。开发与实机验证使用月虹白特别版。
 
 ## 在另一台 Mac 上安装
@@ -20,7 +24,7 @@ Claude Code 从 hook 提供的 `effort.level` 或 `CLAUDE_EFFORT` 取得档位�
 
 ```sh
 lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
-"$lights" demo       # 演示四种推理档位及状态切换，回读后恢复原灯效
+"$lights" demo       # 演示推理档位、上下文亮度及状态切换，回读后恢复原灯效
 "$lights" status     # 查看各产品状态、最近收到的 hook、硬件回读及恢复记录
 "$lights" recover    # 清除当前指示状态，要求控制器恢复原灯效
 "$lights" uninstall  # 移除本项目的 hook，清除指示状态并启动恢复
@@ -50,7 +54,7 @@ lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
 | --- | --- |
 | 外圈蓝光、橙光 | 分别代表 Codex、Claude Code 正在运行，包括 Desktop 和 CLI 的本地会话 |
 | F1、F2 | 分别显示 Codex、Claude Code 的等待、出错和完成提示 |
-| 蓝色侧灯 | 有会话正在运行，且无更高优先级的提示 |
+| 蓝色侧灯 | 运行中，亮度随上下文窗口占用率升高 |
 | 琥珀色 | 有会话等待审批或同步提问的答复 |
 | 红色 | 收到 Claude Code 的 `StopFailure`，提示 5 秒 |
 | 绿色 | 主会话本轮结束，提示 5 秒 |
@@ -58,7 +62,7 @@ lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
 
 Codex Desktop 和 CLI 使用同一份用户级 `hooks.json`。Claude Code CLI 和 Claude Desktop 的本地 Code 会话共享用户级 `settings.json`。云端或 SSH 远端执行不在首版范围内。[OpenAI Hooks](https://learn.chatgpt.com/docs/hooks) · [Claude Code Hooks](https://code.claude.com/docs/en/hooks) · [Claude Desktop 配置共享](https://code.claude.com/docs/en/desktop#shared-configuration)
 
-hook 从标准输入提取生命周期信息，用本机 SQLite 事务按产品、会话和可用的轮次 ID 汇总，并按需唤起单一控制器。共享状态记录会话标识、状态、事件、工具名、时间、推理档位，以及查找 Codex 本轮档位所需的本地会话文件路径。聊天内容和工具参数不写入数据库。控制器合并重复状态，全部空闲时释放 USB 并退出。客户端异常退出时会清理能识别到进程的活动指示，其他缺失终止事件的会话在最后事件的 4 小时后过期。`recover` 可立即清除指示。
+hook 从标准输入提取生命周期信息，用本机 SQLite 事务按产品、会话和可用的轮次 ID 汇总，并按需唤起单一控制器。共享状态记录会话标识、状态、事件、工具名、时间、推理档位、上下文占用率，以及查找 Codex 本轮档位所需的本地会话文件路径。聊天内容和工具参数不写入数据库。控制器合并重复状态，全部空闲时释放 USB 并退出。客户端异常退出时会清理能识别到进程的活动指示，其他缺失终止事件的会话在最后事件的 4 小时后过期。`recover` 可立即清除指示。
 
 ## 灯控协议与验收
 
@@ -68,7 +72,7 @@ hook 从标准输入提取生命周期信息，用本机 SQLite 事务按产品�
 
 状态变化时控制器回读完整画面。运行中每步间隔约 120 毫秒，另计 USB 通信时间。驱动只写入有变化的灯位并核对回执。外圈动画使用 33 个已映射的灯位。空格作为一整格点亮。按键接管受限时，侧灯仍可显示状态。[Air75 V3 灯位表](https://github.com/bohu8264/NuPhyLab-next/blob/1f1ae72dad5e61e363860fb34a2df00407b483bb/shared/air75-v3-ansi.json)
 
-本机实测已验证逐键和侧灯配置写入、等待优先级及原灯效恢复。可通过 `demo` 检查具体键位和亮度。在另一台 Mac 验收四个入口时，分别运行一轮「提交 → 等待审批 → 继续 → 结束」，用 `status` 核对事件及硬件状态，再让一个会话等待、另一个会话结束，观察侧灯是否保持琥珀色。
+本机实测已验证逐键和侧灯配置写入、等待优先级及原灯效恢复。向侧灯依次输入 0%、50%、100%、10% 的上下文占用率时，已回读确认亮度为 15%、58%、100%、24%，再切到等待状态时回到 38% 琥珀色。可通过 `demo` 检查具体键位和亮度。在另一台 Mac 验收四个入口时，分别运行一轮「提交 → 等待审批 → 继续 → 结束」，用 `status` 核对事件及硬件状态，再让一个会话等待、另一个会话结束，观察侧灯是否保持琥珀色。
 
 ## 从源码构建安装包
 

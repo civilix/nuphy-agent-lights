@@ -9,6 +9,27 @@ from pathlib import Path
 from lifecycle import EVENTS
 
 
+STATUS_COMMAND = '"$HOME/Library/Application Support/NuPhy Agent Lights/current/lights" claude-statusline'
+PIPE_PREFIX = STATUS_COMMAND + " --passthrough | (\n"
+
+
+def merge_statusline(settings, install):
+    line = settings.get("statusLine")
+    if "statusLine" not in settings and install:
+        settings["statusLine"] = {"type": "command", "command": STATUS_COMMAND}
+    elif isinstance(line, dict) and line.get("type") == "command":
+        command = line.get("command")
+        if command == STATUS_COMMAND:
+            if not install:
+                del settings["statusLine"]
+        elif isinstance(command, str) and command:
+            wrapped = command.startswith(PIPE_PREFIX) and command.endswith("\n)")
+            if install and not wrapped:
+                line["command"] = PIPE_PREFIX + command + "\n)"
+            elif wrapped and not install:
+                line["command"] = command[len(PIPE_PREFIX):-2]
+
+
 def merge(original, product, command, install):
     result = copy.deepcopy(original)
     hooks = result.setdefault("hooks", {})
@@ -30,6 +51,8 @@ def merge(original, product, command, install):
             del hooks[event]
     if not hooks and "hooks" not in original:
         del result["hooks"]
+    if product == "claude":
+        merge_statusline(result, install)
     return result
 
 
