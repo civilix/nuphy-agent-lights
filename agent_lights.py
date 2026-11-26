@@ -325,7 +325,7 @@ def main():
     elif args.action in ("install", "uninstall"):
         from hook_config import configure
         if args.action == "install" and not SCRIPT.with_name("HIDBridge").is_file():
-            cli.error("Run install.command from the Apple Silicon package")
+            cli.error("Run ./scripts/install-source.sh from the repository root")
         configure(args.action == "install", DATA)
         if args.action == "uninstall":
             with database() as db:

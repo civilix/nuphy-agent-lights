@@ -12,13 +12,31 @@ Codex 约每秒检查当前会话记录末尾 1 MiB，取最近一次请求的 `
 
 设备范围为 **Apple Silicon Mac、macOS 13 或更高版本、USB 有线模式、Air75 V3 ANSI 官方固件 2.0.0.7**。开发与实机验证使用月虹白特别版。
 
-## 在另一台 Mac 上安装
+## 从源码部署到 Mac
 
-1. 把 `NuPhy-Agent-Lights-macOS-arm64.tar.gz` 复制到另一台 Mac，双击解压。安装包内含 ARM64 HID 驱动、Python 运行时和许可证，目标机可以离线安装，无需 Git、Homebrew、Xcode 或系统 Python。
-2. 用当前 macOS 用户运行解压目录里的 `install.command`。也可以在终端输入 `/bin/sh `，将该文件拖入终端后按回车。安装器将运行文件复制到当前用户的 `~/Library/Application Support/NuPhy Agent Lights/`，并合并 Codex 和 Claude Code 的 hook 配置。安装完成后可以移动或删除解压目录。
-3. 键盘连 USB 数据线并切到有线档位。关闭占用键盘的 NuPhyIO 或 NuPhy Lab。在 Codex CLI 输入 `/hooks`，或到桌面端 Settings → Hooks，审阅指向 `NuPhy Agent Lights/current/lights` 的命令。Claude Desktop 使用 Code 标签页的本地会话。打开新会话进行测试。
+如果这台 Mac 已经装好灯控程序，只需重新启用 hook 和 Claude 状态栏，可直接运行：
 
-安装包使用本地签名。若 macOS 阻止运行，请先核对归档的 SHA-256 和来源，再通过系统设置的「隐私与安全性」处理 macOS 显示的打开提示。每台 Mac 各自完成客户端登录、hook 审阅和必要的设备权限设置。迁移时只需复制归档；恢复记录与本机键盘配置相关。
+```sh
+"$HOME/Library/Application Support/NuPhy Agent Lights/current/lights" install
+```
+
+hook 将客户端事件交给灯控程序，HIDBridge 负责通过 USB 写入键盘灯效。首次从源码部署或更新源码版本时会调用 Swift 编译器；平时触发 hook 会直接运行已编译的 HIDBridge。
+
+在新 Mac 上部署源码时，准备 Apple Silicon Mac、macOS 13 或更高版本、网络和 Apple Command Line Tools（含 Swift、Git 和 Python 3.9+）。如果尚未安装开发工具，先运行 `xcode-select --install` 并等待安装完成。以日常使用键盘的 macOS 用户执行以下命令。
+
+```sh
+git clone https://github.com/civilix/nuphy-agent-lights.git
+cd nuphy-agent-lights
+./scripts/install-source.sh
+```
+
+已有源码仓库时，直接在仓库根目录运行最后一条命令。更新时检出需要的版本，然后再次运行该脚本。原先用归档安装的用户也可直接执行，完成后既有 hook 路径会指向源码构建的版本，旧版本保留供运行中的控制器收尾。
+
+- **下载和编译**　[构建脚本](scripts/build-bridge.sh) 从固定的 NuPhy Lab 提交下载 `HIDBridge.swift` 和许可证，校验 Swift 源码的 SHA-256，随后在本机编译、进行 ad-hoc 签名并运行桥接器自检。
+- **安装内容**　[源码部署脚本](scripts/install-source.sh) 使用 `/usr/bin/python3` 和标准库，将项目 Python 文件、启动脚本、工作台静态文件、本机编译的桥接器及其许可证放入当前用户的 `~/Library/Application Support/NuPhy Agent Lights/versions/`。构建成功并配置完成后切换 `current`。部署后可以移动源码目录，运行时仍需保留本机开发工具。
+- **客户端配置**　[配置代码](hook_config.py) 将灯控命令合并到 Codex 的 `~/.codex/hooks.json`、Claude Code 的 `~/.claude/settings.json`，并接入 Claude 状态栏。改动前已有的配置会备份到灯控目录的 `hook-backups/`。若设置了 `CODEX_HOME` 或 `CLAUDE_CONFIG_DIR`，请从带有这些变量的终端部署。
+
+键盘连 USB 数据线并切到有线档位，关闭占用键盘的 NuPhyIO 或 NuPhy Lab。在 Codex CLI 输入 `/hooks`，或在桌面端 Settings → Hooks 审阅指向 `NuPhy Agent Lights/current/lights` 的命令，再打开新的本地会话。Claude Desktop 使用 Code 标签页的本地会话。
 
 ### 验证与日常操作
 
@@ -30,7 +48,7 @@ lights="$HOME/Library/Application Support/NuPhy Agent Lights/current/lights"
 "$lights" uninstall  # 移除本项目的 hook，清除指示状态并启动恢复
 ```
 
-若键盘曾拔线，将它接回原 Mac/Win 档位后检查 `status`。恢复完成时 `recovery_records` 为空。卸载后程序、配置备份和恢复记录留在用户目录，便于重新启用或恢复。确认恢复后可自行删除该目录。重复安装同一份归档会复用已有程序，并保留其他 hook。用户配置路径遵循 `CODEX_HOME` 和 `CLAUDE_CONFIG_DIR`；自定义路径时请从带有这些环境变量的终端运行安装器。
+若键盘曾拔线，将它接回原 Mac/Win 档位后检查 `status`。恢复完成时 `recovery_records` 为空。卸载后程序、配置备份和恢复记录留在用户目录，便于重新启用或恢复。确认恢复后可自行删除该目录。
 
 ## 图形化配置与测试
 
@@ -74,14 +92,14 @@ hook 从标准输入提取生命周期信息，用本机 SQLite 事务按产品�
 
 本机实测已验证逐键和侧灯配置写入、等待优先级及原灯效恢复。向侧灯依次输入 0%、50%、100%、10% 的上下文占用率时，已回读确认亮度为 15%、58%、100%、24%，再切到等待状态时回到 38% 琥珀色。可通过 `demo` 检查具体键位和亮度。在另一台 Mac 验收四个入口时，分别运行一轮「提交 → 等待审批 → 继续 → 结束」，用 `status` 核对事件及硬件状态，再让一个会话等待、另一个会话结束，观察侧灯是否保持琥珀色。
 
-## 从源码构建安装包
+## 维护者测试与可选离线归档
 
-在具备 Command Line Tools 和网络的 Apple Silicon Mac 上运行：
+在仓库根目录运行单元测试。需要单独生成离线归档时，可以再运行后两条命令。
 
 ```sh
+/usr/bin/python3 -B -m unittest -v
 ./scripts/build-package.sh
 ./scripts/test-package.sh dist/NuPhy-Agent-Lights-macOS-arm64.tar.gz
-/usr/bin/python3 -B -m unittest -v
 ```
 
-归档和 SHA-256 校验文件输出到 `dist/`。构建脚本固定 NuPhy Lab 提交和 Python 独立运行时版本，校验 SHA-256、本地编译 HID 驱动并运行桥接器自检。接收方只需归档。包内保留 NuPhy Lab 的 MIT 许可和 Python 运行时随附的第三方许可。[NuPhy Lab](https://github.com/bohu8264/NuPhyLab-next) · [Python Build Standalone](https://github.com/astral-sh/python-build-standalone)
+归档和 SHA-256 校验文件输出到 `dist/`。已有离线归档的用户可解压并运行其中的 `install.command`。构建脚本固定 NuPhy Lab 提交和 Python 独立运行时版本，校验 SHA-256、本地编译 HID 驱动并运行桥接器自检。包内保留 NuPhy Lab 的 MIT 许可和 Python 运行时随附的第三方许可。[NuPhy Lab](https://github.com/bohu8264/NuPhyLab-next) · [Python Build Standalone](https://github.com/astral-sh/python-build-standalone)

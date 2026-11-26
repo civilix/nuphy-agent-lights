@@ -47,7 +47,7 @@ def test_profile(data):
     if not bridge.is_file():
         bridge = DATA / "current/HIDBridge"
     if not bridge.is_file():
-        raise ValueError("未找到 HIDBridge，请先安装本项目的 macOS 安装包。")
+        raise ValueError("未找到 HIDBridge，请在源码仓库中运行 ./scripts/install-source.sh。")
     with agent_lights.test_keyboard(bridge) as (board, _):
         board.render(states, colors, brightness, efforts)
         board.display_for(6)
